@@ -2,6 +2,74 @@ let drawMap;
 let drawingManager;
 let currentPolygon;
 
+const PLACEHOLDER_BY_SLUG = {
+  "accion-represiva": {
+    title: "Ej: Detencion masiva en parque",
+    description: "Incluye fecha, tipo de operativo, cantidad de detenidos, fuerzas presentes, y puntos de referencia visibles.",
+  },
+  "residencia-represor": {
+    title: "Ej: Residencia de funcionario local",
+    description: "Describe la ubicacion exacta, referencias cercanas, horarios frecuentes y evidencias visibles.",
+  },
+  "centro-penitenciario": {
+    title: "Ej: Centro penitenciario provincial",
+    description: "Anota nombre del centro, capacidad aproximada, accesos, y cualquier dato verificable.",
+  },
+  "estacion-policia": {
+    title: "Ej: Estacion de policia",
+    description: "Incluye la direccion, nombre del distrito, patrullas visibles y horarios de mayor actividad.",
+  },
+  "escuela-pcc": {
+    title: "Ej: Escuela de formacion del PCC",
+    description: "Detalla el nombre, ubicacion, horarios, entradas, y cualquier señalizacion.",
+  },
+  "sede-pcc": {
+    title: "Ej: Sede municipal del PCC",
+    description: "Describe la sede, accesos, señales y eventos recurrentes.",
+  },
+  "sede-seguridad-estado": {
+    title: "Ej: Sede de Seguridad del Estado",
+    description: "Incluye la ubicacion precisa, accesos, presencia de vigilancia y referencias cercanas.",
+  },
+  "unidad-militar": {
+    title: "Ej: Unidad militar",
+    description: "Anota el tipo de unidad, accesos, perimetro, y presencia visible.",
+  },
+  "base-espionaje": {
+    title: "Ej: Base de espionaje",
+    description: "Describe infraestructura, antenas, instalaciones cercanas y evidencia observable.",
+  },
+};
+
+function applyPlaceholders() {
+  const select = document.getElementById("categorySelect");
+  const title = document.getElementById("titleInput");
+  const desc = document.getElementById("descriptionInput");
+  if (!select || !title || !desc) return;
+
+  const selected = select.options[select.selectedIndex];
+  const slug = selected?.dataset?.slug;
+  const sample = PLACEHOLDER_BY_SLUG[slug];
+  if (sample) {
+    title.placeholder = sample.title;
+    desc.placeholder = sample.description;
+  }
+}
+
+function setupLinks() {
+  const addBtn = document.getElementById("addLinkBtn");
+  const list = document.getElementById("linksList");
+  if (!addBtn || !list) return;
+
+  addBtn.addEventListener("click", () => {
+    const input = document.createElement("input");
+    input.type = "url";
+    input.name = "links[]";
+    input.placeholder = "https://ejemplo.com/fuente";
+    list.appendChild(input);
+  });
+}
+
 window.initDrawMap = function () {
   const mapEl = document.getElementById("drawMap");
   if (!mapEl) return;
@@ -129,3 +197,12 @@ function syncPolygon(event) {
 
   input.value = geojson ? JSON.stringify(geojson) : "";
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  const select = document.getElementById("categorySelect");
+  if (select) {
+    select.addEventListener("change", applyPlaceholders);
+  }
+  applyPlaceholders();
+  setupLinks();
+});

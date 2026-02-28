@@ -22,19 +22,20 @@
   <form class="form-grid" method="post">
     <label>
       Titulo
-      <input type="text" name="title" placeholder="Ej: Detencion arbitraria" />
+      <input type="text" name="title" id="titleInput" placeholder="Ej: Detencion arbitraria" />
     </label>
     <label>
       Categoria
-      <select name="category_id">
+      <select name="category_id" id="categorySelect" required>
+        <option value="" disabled selected>Elige categoria</option>
         {% for cat in categories %}
-          <option value="{{ cat.id }}">{{ cat.name }}</option>
+          <option value="{{ cat.id }}" data-slug="{{ cat.slug }}">{{ cat.name }}</option>
         {% endfor %}
       </select>
     </label>
     <label>
       Descripcion
-      <textarea name="description" rows="6"></textarea>
+      <textarea name="description" id="descriptionInput" rows="6" required placeholder="Incluye detalles que ayuden a identificar el lugar, fechas, contexto y referencias visibles."></textarea>
     </label>
     <div class="two-col">
       <label>
@@ -54,6 +55,15 @@
       Imagen (URL)
       <input type="text" name="image_url" />
     </label>
+    <div class="links-group">
+      <div class="links-header">
+        <span>Enlaces de interes</span>
+        <button type="button" class="btn-secondary" id="addLinkBtn">+ Agregar</button>
+      </div>
+      <div id="linksList" class="links-list">
+        <input type="url" name="links[]" placeholder="https://ejemplo.com/fuente" />
+      </div>
+    </div>
     <input type="hidden" name="polygon_geojson" id="polygonGeojson" />
     <button type="submit" class="btn-primary">
       {% if moderation_enabled %}

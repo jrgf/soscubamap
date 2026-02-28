@@ -36,11 +36,24 @@ body {
 }
 
 .logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-size: 20px;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--accent);
   text-decoration: none;
+}
+
+.logo-mark {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.logo-text {
+  color: var(--accent);
 }
 
 .beta-badge {
@@ -532,6 +545,25 @@ textarea {
 .btn-secondary:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.links-group {
+  display: grid;
+  gap: 10px;
+}
+
+.links-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.links-list {
+  display: grid;
+  gap: 8px;
 }
 
 .flash-group {

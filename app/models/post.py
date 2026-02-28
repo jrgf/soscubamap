@@ -24,6 +24,7 @@ class Post(db.Model):
     longitude = db.Column(db.Numeric(9, 6), nullable=False)
     address = db.Column(db.String(255))
     polygon_geojson = db.Column(db.Text)
+    links_json = db.Column(db.Text)
 
     status = db.Column(post_status_enum, default="pending", nullable=False)
     is_anonymous = db.Column(db.Boolean, default=True)

@@ -1,4 +1,5 @@
 from flask import jsonify, request
+import json
 
 from app.models.post import Post
 from app.models.category import Category
@@ -49,6 +50,7 @@ def posts():
                 "created_at": p.created_at.isoformat(),
                 "anon": f"Anon-{p.author.anon_code}" if p.author and p.author.anon_code else "Anon",
                 "polygon_geojson": p.polygon_geojson,
+                "links": json.loads(p.links_json) if p.links_json else [],
                 "category": {
                     "id": p.category.id,
                     "name": p.category.name,

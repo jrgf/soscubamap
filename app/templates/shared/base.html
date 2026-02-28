@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ config.APP_NAME }}{% block title %}{% endblock %}</title>
     <meta name="description" content="{% block meta_description %}Mapa colaborativo para documentar acciones represivas y lugares clave en Cuba. Reportes anonimos, verificacion comunitaria y visualizacion en tiempo real.{% endblock %}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favico.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
     <link
       rel="stylesheet"
@@ -16,7 +17,9 @@
   <body>
     <header class="site-header">
       <a class="logo" href="{{ url_for('map.dashboard') }}">
-        SOS Cuba Map <span class="beta-badge">beta</span>
+        <img src="{{ url_for('static', filename='img/logo.png') }}" alt="SOS Cuba Map" class="logo-mark" />
+        <span class="logo-text">SOS Cuba Map</span>
+        <span class="beta-badge">beta</span>
       </a>
       <nav class="nav-links">
         <a href="{{ url_for('map.dashboard') }}">Mapa</a>

@@ -1,5 +1,6 @@
 from decimal import Decimal
 import secrets
+import json
 from flask import render_template, current_app, redirect, url_for, request, flash
 from flask_login import current_user
 
@@ -35,6 +36,8 @@ def new_post():
         longitude = request.form.get("longitude", "").strip()
         address = request.form.get("address", "").strip()
         polygon_geojson = request.form.get("polygon_geojson", "").strip()
+        links = request.form.getlist("links[]")
+        links = [link.strip() for link in links if link.strip()]
 
         if not title or not description or not category_id or not latitude or not longitude:
             flash("Completa todos los campos obligatorios.", "error")
@@ -75,6 +78,7 @@ def new_post():
             longitude=lng,
             address=address or None,
             polygon_geojson=polygon_geojson or None,
+            links_json=json.dumps(links) if links else None,
             author_id=author_id,
         )
         post.status = "pending" if moderation_enabled else "approved"

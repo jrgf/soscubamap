@@ -5,6 +5,7 @@ let recentTimer;
 let searchBox;
 let autocomplete;
 let searchMarker;
+let geocoder;
 
 const CATEGORY_ICONS = {
   "accion-represiva": "fa-hand-fist",
@@ -80,6 +81,18 @@ function renderMarkers(posts) {
           <div style="font-size:12px;color:#333;margin-bottom:6px;">${post.anon || "Anon"}</div>
           ${createdText ? `<div style="font-size:12px;color:#666;margin-bottom:6px;">${createdText}</div>` : ""}
           <p style="margin:0 0 6px;">${post.description}</p>
+          ${
+            post.links && post.links.length
+              ? `<div style="font-size:12px;margin-top:6px;">
+                   ${post.links
+                     .map(
+                       (link) =>
+                         `<div><a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a></div>`
+                     )
+                     .join("")}
+                 </div>`
+              : ""
+          }
           ${post.address ? `<div style="font-size:12px;color:#666;">${post.address}</div>` : ""}
         </div>
       `,
@@ -197,10 +210,7 @@ window.initMap = async function () {
       { lat: 19.8, lng: -85.2 },
       { lat: 23.7, lng: -73.9 }
     );
-    searchBox = new google.maps.places.SearchBox(searchInput, {
-      bounds: cubaBounds,
-    });
-    searchBox.setBounds(cubaBounds);
+    geocoder = new google.maps.Geocoder();
     autocomplete = new google.maps.places.Autocomplete(searchInput, {
       bounds: cubaBounds,
       componentRestrictions: { country: "cu" },
@@ -210,21 +220,26 @@ window.initMap = async function () {
     autocomplete.addListener("place_changed", () => {
       const place = autocomplete.getPlace();
       if (!place.geometry || !place.geometry.location) return;
-      map.panTo(place.geometry.location);
-      map.setZoom(Math.max(map.getZoom(), 14));
-
-      if (searchMarker) {
-        searchMarker.setMap(null);
-      }
-      searchMarker = new google.maps.Marker({
-        position: place.geometry.location,
-        map,
-        title: place.name || "Busqueda",
-      });
+      focusSearchResult(place.geometry, place.name);
     });
 
-    map.addListener("bounds_changed", () => {
-      searchBox.setBounds(map.getBounds());
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const query = searchInput.value.trim();
+      if (!query || !geocoder) return;
+      geocoder.geocode(
+        {
+          address: query,
+          bounds: cubaBounds,
+          componentRestrictions: { country: "cu" },
+        },
+        (results, status) => {
+          if (status !== "OK" || !results?.length) return;
+          const result = results[0];
+          focusSearchResult(result.geometry, result.formatted_address);
+        }
+      );
     });
   }
 
@@ -264,3 +279,24 @@ window.initMap = async function () {
   }
   recentTimer = setInterval(refreshRecent, 15000);
 };
+
+function focusSearchResult(geometry, label) {
+  if (geometry.viewport) {
+    map.fitBounds(geometry.viewport);
+  } else if (geometry.location) {
+    map.panTo(geometry.location);
+    map.setZoom(Math.max(map.getZoom(), 16));
+  }
+
+  if (searchMarker) {
+    searchMarker.setMap(null);
+  }
+  const position = geometry.location || geometry.viewport?.getCenter();
+  if (position) {
+    searchMarker = new google.maps.Marker({
+      position,
+      map,
+      title: label || "Busqueda",
+    });
+  }
+}
