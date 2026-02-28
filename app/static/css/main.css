@@ -140,7 +140,7 @@ body {
 .filter-controls {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .filter-controls input {

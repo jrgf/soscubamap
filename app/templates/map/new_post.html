@@ -7,7 +7,14 @@
 
   <div class="draw-wrap">
     <div class="draw-title">Dibuja el area del reporte (opcional)</div>
-    <div id="drawMap" class="draw-map" data-api-key="{{ config.GOOGLE_MAPS_API_KEY }}" data-map-id="{{ config.GOOGLE_MAPS_MAP_ID }}"></div>
+    <div
+      id="drawMap"
+      class="draw-map"
+      data-api-key="{{ config.GOOGLE_MAPS_API_KEY }}"
+      data-map-id="{{ config.GOOGLE_MAPS_MAP_ID }}"
+      data-lat="{{ preset_lat }}"
+      data-lng="{{ preset_lng }}"
+    ></div>
     <div class="draw-help">Usa el icono de poligono para dibujar. Puedes borrar y volver a dibujar.</div>
   </div>
 

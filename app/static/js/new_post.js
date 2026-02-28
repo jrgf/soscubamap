@@ -6,13 +6,23 @@ window.initDrawMap = function () {
   const mapEl = document.getElementById("drawMap");
   if (!mapEl) return;
 
+  const lat = parseFloat(mapEl.dataset.lat);
+  const lng = parseFloat(mapEl.dataset.lng);
+  const hasPreset = Number.isFinite(lat) && Number.isFinite(lng);
+  const center = hasPreset ? { lat, lng } : { lat: 21.521757, lng: -77.781167 };
+
   drawMap = new google.maps.Map(mapEl, {
-    center: { lat: 21.521757, lng: -77.781167 },
-    zoom: 7,
+    center,
+    zoom: hasPreset ? 14 : 7,
     minZoom: 7,
     mapId: mapEl.dataset.mapId || undefined,
+    mapTypeId: "satellite",
     disableDefaultUI: true,
   });
+
+  if (hasPreset) {
+    new google.maps.Marker({ position: center, map: drawMap });
+  }
 
   drawingManager = new google.maps.drawing.DrawingManager({
     drawingMode: google.maps.drawing.OverlayType.POLYGON,
