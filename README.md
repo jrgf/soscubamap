@@ -1,4 +1,4 @@
-# SOS Cuba Map
+# #SOSCuba Map
 
 Dashboard colaborativo para documentar y visualizar lugares y acciones represivas en Cuba.
 

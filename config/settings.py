@@ -11,7 +11,7 @@ class Config:
     SESSION_COOKIE_SECURE = False
     REMEMBER_COOKIE_SECURE = False
     WTF_CSRF_ENABLED = True
-    APP_NAME = "SOS Cuba Map"
+    APP_NAME = "#SOSCuba Map"
     DEFAULT_LANGUAGE = "es"
     GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
     GOOGLE_MAPS_MAP_ID = os.getenv("GOOGLE_MAPS_MAP_ID", "")
