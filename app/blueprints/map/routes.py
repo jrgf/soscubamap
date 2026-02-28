@@ -12,9 +12,21 @@ from app.models.site_setting import SiteSetting
 from app.models.location_report import LocationReport
 from app.models.post_revision import PostRevision
 from app.models.post_edit_request import PostEditRequest
-from app.services.cuba_locations import PROVINCES, MUNICIPALITIES
+from app.services.geo_lookup import lookup_location, list_provinces, list_municipalities, municipalities_map
 from app.extensions import db
 from . import map_bp
+
+
+def _resolve_geo_location(lat, lng, province, municipality):
+    try:
+        auto_prov, auto_mun = lookup_location(lat, lng)
+    except Exception:
+        return province, municipality
+    if auto_prov:
+        province = auto_prov
+    if auto_mun:
+        municipality = auto_mun
+    return province, municipality
 
 
 @map_bp.route("/")
@@ -48,12 +60,16 @@ def new_post():
         if not title or not description or not category_id or not latitude or not longitude:
             flash("Completa todos los campos obligatorios.", "error")
             return redirect(url_for("map.new_post"))
-
         try:
             lat = Decimal(latitude)
             lng = Decimal(longitude)
         except Exception:
             flash("Latitud/longitud inválidas.", "error")
+            return redirect(url_for("map.new_post"))
+
+        province, municipality = _resolve_geo_location(lat, lng, province, municipality)
+        if not province or not municipality:
+            flash("Provincia y municipio son obligatorios.", "error")
             return redirect(url_for("map.new_post"))
 
         author_id = None
@@ -210,6 +226,11 @@ def edit_report_public(post_id):
             flash("Latitud/longitud inválidas.", "error")
             return redirect(url_for("map.edit_report_public", post_id=post.id))
 
+        province, municipality = _resolve_geo_location(lat, lng, province, municipality)
+        if not province or not municipality:
+            flash("Provincia y municipio son obligatorios.", "error")
+            return redirect(url_for("map.edit_report_public", post_id=post.id))
+
         moderation_setting = SiteSetting.query.filter_by(key="moderation_enabled").first()
         moderation_enabled = True
         if moderation_setting:
@@ -329,14 +350,11 @@ def reports():
 
     posts = query.order_by(Post.created_at.desc()).all()
 
-    provinces = PROVINCES
-    if selected_province and selected_province in MUNICIPALITIES:
-        municipalities = MUNICIPALITIES[selected_province]
+    provinces = list_provinces()
+    if selected_province:
+        municipalities = list_municipalities(selected_province)
     else:
-        all_muns = []
-        for items in MUNICIPALITIES.values():
-            all_muns.extend(items)
-        municipalities = sorted(set(all_muns))
+        municipalities = list_municipalities()
 
     return render_template(
         "map/reports.html",
@@ -345,5 +363,5 @@ def reports():
         municipalities=municipalities,
         selected_province=selected_province,
         selected_municipality=selected_municipality,
-        municipalities_map=MUNICIPALITIES,
+        municipalities_map=municipalities_map(),
     )

@@ -9,10 +9,23 @@ from app.models.post_revision import PostRevision
 from app.models.post_edit_request import PostEditRequest
 from app.models.category import Category
 from app.extensions import db
+from app.services.geo_lookup import lookup_location
 from flask_login import current_user
 import json
 from decimal import Decimal
 from . import admin_bp
+
+
+def _resolve_geo_location(lat, lng, province, municipality):
+    try:
+        auto_prov, auto_mun = lookup_location(lat, lng)
+    except Exception:
+        return province, municipality
+    if auto_prov:
+        province = auto_prov
+    if auto_mun:
+        municipality = auto_mun
+    return province, municipality
 
 
 @admin_bp.route("/")
@@ -109,6 +122,11 @@ def edit_report(post_id):
             lng = Decimal(longitude)
         except Exception:
             flash("Latitud/longitud inválidas.", "error")
+            return redirect(url_for("admin.edit_report", post_id=post.id))
+
+        province, municipality = _resolve_geo_location(lat, lng, province, municipality)
+        if not province or not municipality:
+            flash("Provincia y municipio son obligatorios.", "error")
             return redirect(url_for("admin.edit_report", post_id=post.id))
 
         moderation_enabled = get_setting("moderation_enabled", "true") == "true"
