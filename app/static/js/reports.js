@@ -105,6 +105,31 @@ async function initReportCard(card) {
     });
   }
 
+  const detailBtn = card.querySelector(".detail-btn");
+  if (detailBtn) {
+    detailBtn.addEventListener("click", () => {
+      const url = detailBtn.getAttribute("data-detail-url");
+      if (!url) return;
+      window.location.href = url;
+    });
+  }
+
+  const copyBtn = card.querySelector(".copy-link-btn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async () => {
+      const url = copyBtn.getAttribute("data-copy-url");
+      if (!url) return;
+      const full = `${window.location.origin}${url}`;
+      try {
+        await navigator.clipboard.writeText(full);
+        copyBtn.textContent = "Enlace copiado";
+        setTimeout(() => (copyBtn.textContent = "Copiar enlace"), 1500);
+      } catch (e) {
+        copyBtn.textContent = "Copia manual";
+      }
+    });
+  }
+
   const editBtn = card.querySelector(".edit-btn");
   if (editBtn) {
     editBtn.addEventListener("click", () => {

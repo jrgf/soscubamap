@@ -122,10 +122,12 @@ function renderMarkers(posts) {
                          `<div><a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a></div>`
                      )
                      .join("")}
-                 </div>`
+                </div>`
               : ""
           }
           <div class="info-actions">
+            <button id="detailBtn-${post.id}" data-detail-url="/reporte/${post.id}" class="info-btn info-btn-outline">Ver detalle</button>
+            <button id="copyLinkBtn-${post.id}" data-copy-url="/reporte/${post.id}" class="info-btn info-btn-outline">Copiar enlace</button>
             <button id="reportLocationBtn" data-report-url="/reportar-ubicacion/${post.id}" class="info-btn info-btn-outline">Reportar ubicación</button>
             <button id="viewHistoryBtn" data-history-url="/reporte/${post.id}/historial" class="info-btn info-btn-outline info-btn-blue">Ver historial</button>
             <button id="verifyBtn-${post.id}" data-verify-id="${post.id}" class="info-btn info-btn-solid">Verificar</button>
@@ -138,6 +140,29 @@ function renderMarkers(posts) {
     });
 
     google.maps.event.addListener(info, "domready", () => {
+      const detailBtn = document.getElementById(`detailBtn-${post.id}`);
+      if (detailBtn) {
+        detailBtn.addEventListener("click", () => {
+          const url = detailBtn.getAttribute("data-detail-url");
+          if (!url) return;
+          window.location.href = url;
+        });
+      }
+      const copyBtn = document.getElementById(`copyLinkBtn-${post.id}`);
+      if (copyBtn) {
+        copyBtn.addEventListener("click", async () => {
+          const url = copyBtn.getAttribute("data-copy-url");
+          if (!url) return;
+          const full = `${window.location.origin}${url}`;
+          try {
+            await navigator.clipboard.writeText(full);
+            copyBtn.textContent = "Enlace copiado";
+            setTimeout(() => (copyBtn.textContent = "Copiar enlace"), 1500);
+          } catch (e) {
+            copyBtn.textContent = "Copia manual";
+          }
+        });
+      }
       const reportBtn = document.getElementById("reportLocationBtn");
       if (reportBtn) {
         reportBtn.addEventListener("click", () => {

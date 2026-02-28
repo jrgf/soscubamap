@@ -1,7 +1,7 @@
 from decimal import Decimal
 import secrets
 import json
-from flask import render_template, current_app, redirect, url_for, request, flash
+from flask import render_template, current_app, redirect, url_for, request, flash, abort
 from flask_login import current_user
 
 from app.models.category import Category
@@ -145,6 +145,8 @@ def new_post():
         preset_lat=preset_lat,
         preset_lng=preset_lng,
         moderation_enabled=moderation_enabled,
+        provinces=list_provinces(),
+        municipalities_map=municipalities_map(),
     )
 
 
@@ -302,6 +304,33 @@ def edit_report_public(post_id):
         return redirect(url_for("map.dashboard"))
 
     return render_template("map/edit_report.html", post=post, categories=categories, links=links)
+
+
+@map_bp.route("/reporte/<int:post_id>")
+def report_detail(post_id):
+    post = Post.query.get_or_404(post_id)
+    if post.status != "approved":
+        allowed = (
+            current_user.is_authenticated
+            and (current_user.has_role("moderador") or current_user.has_role("administrador"))
+        )
+        if not allowed:
+            abort(404)
+
+    links = []
+    if post.links_json:
+        try:
+            links = json.loads(post.links_json)
+        except Exception:
+            links = []
+
+    anon_label = f"Anon-{post.author.anon_code}" if post.author and post.author.anon_code else "Anon"
+    return render_template(
+        "map/report_detail.html",
+        post=post,
+        links=links,
+        anon_label=anon_label,
+    )
 
 
 @map_bp.route("/reporte/<int:post_id>/historial")

@@ -1,0 +1,64 @@
+{% extends "shared/base.html" %}
+{% block title %} | Reporte{% endblock %}
+{% block meta_description %}Detalle del reporte en #SOSCuba Map. Verifica, comenta y colabora con ediciones transparentes.{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="report-card" data-post-id="{{ post.id }}">
+    <div class="report-main">
+      <h1>{{ post.title }}</h1>
+      <div class="muted">{{ post.category.name }}</div>
+      <div class="muted">{{ anon_label }}</div>
+      <div class="muted">{{ post.created_at }}</div>
+      {% if post.address %}<div class="muted">Dirección: {{ post.address }}</div>{% endif %}
+      {% if post.province or post.municipality %}
+        <div class="muted">Provincia: {{ post.province or 'N/D' }} · Municipio: {{ post.municipality or 'N/D' }}</div>
+      {% endif %}
+      <p>{{ post.description }}</p>
+
+      {% if links and links|length %}
+        <div class="muted">Enlaces de interés</div>
+        <ul>
+          {% for link in links %}
+            <li><a href="{{ link }}" target="_blank" rel="noopener">{{ link }}</a></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    <div class="report-actions">
+      <button class="btn-primary" id="verifyBtn">Verificar</button>
+      <span class="verify-count" id="verifyCount">{{ post.verify_count or 0 }}</span>
+      <button class="btn-secondary" id="copyLinkBtn">Copiar enlace</button>
+      <a class="btn-secondary" href="{{ url_for('map.post_history', post_id=post.id) }}">Historial</a>
+      <a class="btn-secondary" href="{{ url_for('map.edit_report_public', post_id=post.id) }}">Editar</a>
+      <a class="btn-secondary" href="{{ url_for('map.report_location', post_id=post.id) }}">Reportar ubicación</a>
+      <a class="btn-primary" href="{{ url_for('map.dashboard', lat=post.latitude, lng=post.longitude) }}">Ver en el mapa</a>
+    </div>
+
+    <div
+      id="detailMap"
+      class="draw-map"
+      data-api-key="{{ config.GOOGLE_MAPS_API_KEY }}"
+      data-map-id="{{ config.GOOGLE_MAPS_MAP_ID }}"
+      data-lat="{{ post.latitude }}"
+      data-lng="{{ post.longitude }}"
+      data-geojson="{{ post.polygon_geojson|default('')|e }}"
+    ></div>
+
+    <div class="comments" data-post-id="{{ post.id }}">
+      <div class="comment-list" id="comment-list-{{ post.id }}"></div>
+      <form class="comment-form" data-post-id="{{ post.id }}">
+        <textarea name="comment" rows="4" required placeholder="Escribe un comentario..."></textarea>
+        <button class="btn-secondary" type="submit">Enviar comentario</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/report_detail.js') }}"></script>
+{% if config.GOOGLE_MAPS_API_KEY %}
+<script async
+  src="https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&callback=initDetailMap&libraries=marker&v=beta">
+</script>
+{% endif %}
+{% endblock %}

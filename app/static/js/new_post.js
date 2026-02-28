@@ -198,6 +198,37 @@ function syncPolygon(event) {
   input.value = geojson ? JSON.stringify(geojson) : "";
 }
 
+function setupProvinceMunicipality() {
+  const provSelect = document.getElementById("provinceSelect");
+  const munSelect = document.getElementById("municipalitySelect");
+  const municipalities = window.CUBA_MUNICIPALITIES || {};
+  if (!provSelect || !munSelect) return;
+
+  const renderMunicipalities = (province, selected) => {
+    let items = [];
+    if (province && municipalities[province]) {
+      items = municipalities[province];
+    } else {
+      Object.values(municipalities).forEach((list) => {
+        items = items.concat(list);
+      });
+      items = Array.from(new Set(items)).sort();
+    }
+    munSelect.innerHTML =
+      `<option value="" disabled ${selected ? "" : "selected"}>Elige municipio</option>` +
+      items
+        .map(
+          (m) => `<option value="${m}" ${m === selected ? "selected" : ""}>${m}</option>`
+        )
+        .join("");
+  };
+
+  renderMunicipalities(provSelect.value, munSelect.value);
+  provSelect.addEventListener("change", () => {
+    renderMunicipalities(provSelect.value, "");
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const select = document.getElementById("categorySelect");
   if (select) {
@@ -205,4 +236,5 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   applyPlaceholders();
   setupLinks();
+  setupProvinceMunicipality();
 });

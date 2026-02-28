@@ -47,6 +47,8 @@
         <div class="report-actions">
           <button class="btn-primary verify-btn" data-post-id="{{ post.id }}">Verificar</button>
           <span class="verify-count" id="verify-count-{{ post.id }}">{{ post.verify_count or 0 }}</span>
+          <button class="btn-secondary detail-btn" type="button" data-detail-url="{{ url_for('map.report_detail', post_id=post.id) }}">Ver detalle</button>
+          <button class="btn-secondary copy-link-btn" type="button" data-copy-url="{{ url_for('map.report_detail', post_id=post.id) }}">Copiar enlace</button>
           <button class="btn-secondary" type="button" data-history-url="{{ url_for('map.post_history', post_id=post.id) }}">Historial</button>
           <button class="btn-secondary edit-btn" type="button" data-edit-url="{{ url_for('map.edit_report_public', post_id=post.id) }}">Editar</button>
           <button class="btn-primary map-btn" type="button" data-map-lat="{{ post.latitude }}" data-map-lng="{{ post.longitude }}">Ver en el mapa</button>

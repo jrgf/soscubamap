@@ -649,6 +649,11 @@ body {
   color: var(--muted);
 }
 
+.donate-link {
+  color: #ffffff;
+  font-weight: 700;
+}
+
 @media (max-width: 700px) {
   .donate-card {
     grid-template-columns: 1fr;

@@ -54,11 +54,18 @@
     <div class="two-col">
       <label>
         Provincia
-        <input type="text" name="province" placeholder="Ej: La Habana" required />
+        <select name="province" id="provinceSelect" required>
+          <option value="" disabled selected>Elige provincia</option>
+          {% for prov in provinces %}
+            <option value="{{ prov }}">{{ prov }}</option>
+          {% endfor %}
+        </select>
       </label>
       <label>
         Municipio
-        <input type="text" name="municipality" placeholder="Ej: Plaza de la Revolución" required />
+        <select name="municipality" id="municipalitySelect" required>
+          <option value="" disabled selected>Elige municipio</option>
+        </select>
       </label>
     </div>
     <label>
@@ -86,6 +93,9 @@
 </section>
 
 <script src="{{ url_for('static', filename='js/new_post.js') }}"></script>
+<script>
+  window.CUBA_MUNICIPALITIES = {{ municipalities_map|tojson }};
+</script>
 {% if config.GOOGLE_MAPS_API_KEY %}
 <script async
   src="https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&callback=initDrawMap&libraries=drawing&v=beta">
