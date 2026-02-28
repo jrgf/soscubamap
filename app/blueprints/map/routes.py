@@ -9,6 +9,8 @@ from app.models.post import Post
 from app.models.user import User
 from app.models.role import Role
 from app.models.site_setting import SiteSetting
+from app.models.location_report import LocationReport
+from app.models.post_revision import PostRevision
 from app.extensions import db
 from . import map_bp
 
@@ -35,6 +37,8 @@ def new_post():
         latitude = request.form.get("latitude", "").strip()
         longitude = request.form.get("longitude", "").strip()
         address = request.form.get("address", "").strip()
+        province = request.form.get("province", "").strip()
+        municipality = request.form.get("municipality", "").strip()
         polygon_geojson = request.form.get("polygon_geojson", "").strip()
         links = request.form.getlist("links[]")
         links = [link.strip() for link in links if link.strip()]
@@ -77,6 +81,8 @@ def new_post():
             latitude=lat,
             longitude=lng,
             address=address or None,
+            province=province or None,
+            municipality=municipality or None,
             polygon_geojson=polygon_geojson or None,
             links_json=json.dumps(links) if links else None,
             author_id=author_id,
@@ -115,3 +121,92 @@ def donate():
 @map_bp.route("/acerca")
 def about():
     return render_template("map/about.html")
+
+
+@map_bp.route("/reportar-ubicacion/<int:post_id>", methods=["GET", "POST"])
+def report_location(post_id):
+    post = Post.query.get_or_404(post_id)
+    submitted = False
+    if request.method == "POST":
+        message = request.form.get("message", "").strip()
+        if not message:
+            flash("Describe por qué la ubicación es incorrecta.", "error")
+        else:
+            db.session.add(LocationReport(post_id=post.id, message=message))
+            db.session.commit()
+            submitted = True
+    return render_template("map/report_location.html", post=post, submitted=submitted)
+
+
+@map_bp.route("/reporte/<int:post_id>/historial")
+def post_history(post_id):
+    post = Post.query.get_or_404(post_id)
+    revisions = PostRevision.query.filter_by(post_id=post.id).order_by(PostRevision.created_at.desc()).all()
+    latest_reason = None
+    if revisions:
+        latest_reason = revisions[0].reason
+    links = []
+    if post.links_json:
+        try:
+            links = json.loads(post.links_json)
+        except Exception:
+            links = []
+    rev_links = {}
+    for rev in revisions:
+        if rev.links_json:
+            try:
+                rev_links[rev.id] = json.loads(rev.links_json)
+            except Exception:
+                rev_links[rev.id] = []
+        else:
+            rev_links[rev.id] = []
+
+    return render_template(
+        "map/post_history.html",
+        post=post,
+        revisions=revisions,
+        links=links,
+        rev_links=rev_links,
+        latest_reason=latest_reason,
+    )
+
+
+@map_bp.route("/reportes")
+def reports():
+    selected_province = request.args.get("provincia", "").strip()
+    selected_municipality = request.args.get("municipio", "").strip()
+
+    query = Post.query.filter_by(status="approved")
+    if selected_province:
+        query = query.filter_by(province=selected_province)
+    if selected_municipality:
+        query = query.filter_by(municipality=selected_municipality)
+
+    posts = query.order_by(Post.created_at.desc()).all()
+
+    provinces = (
+        db.session.query(Post.province)
+        .filter(Post.province.isnot(None))
+        .distinct()
+        .order_by(Post.province.asc())
+        .all()
+    )
+    provinces = [p[0] for p in provinces if p[0]]
+
+    municipalities = (
+        db.session.query(Post.municipality)
+        .filter(Post.municipality.isnot(None))
+        .distinct()
+        .order_by(Post.municipality.asc())
+        .all()
+    )
+    municipalities = [m[0] for m in municipalities if m[0]]
+
+    return render_template(
+        "map/reports.html",
+        posts=posts,
+        provinces=provinces,
+        municipalities=municipalities,
+        selected_province=selected_province,
+        selected_municipality=selected_municipality,
+    )

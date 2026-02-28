@@ -1,0 +1,67 @@
+{% extends "shared/base.html" %}
+{% block title %} | Reportes{% endblock %}
+{% block meta_description %}Explora reportes en #SOSCuba Map filtrados por provincia y municipio. Verifica y comenta con transparencia comunitaria.{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Reportes</h1>
+  <p class="muted">Filtra por provincia y municipio. Cada reporte puede ser verificado y comentado.</p>
+
+  <form method="get" class="filter-controls">
+    <label>
+      Provincia
+      <select name="provincia">
+        <option value="">Todas</option>
+        {% for prov in provinces %}
+          <option value="{{ prov }}" {% if prov == selected_province %}selected{% endif %}>{{ prov }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Municipio
+      <select name="municipio">
+        <option value="">Todos</option>
+        {% for mun in municipalities %}
+          <option value="{{ mun }}" {% if mun == selected_municipality %}selected{% endif %}>{{ mun }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn-primary" type="submit">Aplicar</button>
+  </form>
+</section>
+
+<section class="report-list">
+  {% if posts %}
+    {% for post in posts %}
+      <div class="report-card" data-post-id="{{ post.id }}">
+        <div class="report-main">
+          <h3>{{ post.title }}</h3>
+          <div class="muted">{{ post.category.name }}</div>
+          <div class="muted">{{ post.author.anon_code if post.author else 'Anon' }}</div>
+          <div class="muted">{{ post.created_at }}</div>
+          <p>{{ post.description }}</p>
+          {% if post.address %}<div class="muted">Dirección: {{ post.address }}</div>{% endif %}
+          {% if post.province or post.municipality %}
+            <div class="muted">Provincia: {{ post.province or 'N/D' }} · Municipio: {{ post.municipality or 'N/D' }}</div>
+          {% endif %}
+        </div>
+        <div class="report-actions">
+          <button class="btn-primary verify-btn" data-post-id="{{ post.id }}">Verificar</button>
+          <span class="verify-count" id="verify-count-{{ post.id }}">{{ post.verify_count or 0 }}</span>
+          <button class="btn-secondary" type="button" data-history-url="{{ url_for('map.post_history', post_id=post.id) }}">Historial</button>
+        </div>
+        <div class="comments" data-post-id="{{ post.id }}">
+          <div class="comment-list" id="comment-list-{{ post.id }}"></div>
+          <form class="comment-form" data-post-id="{{ post.id }}">
+            <textarea name="comment" rows="3" required placeholder="Escribe un comentario..."></textarea>
+            <button class="btn-secondary" type="submit">Enviar comentario</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="panel">No hay reportes con esos filtros.</div>
+  {% endif %}
+</section>
+
+<script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+{% endblock %}

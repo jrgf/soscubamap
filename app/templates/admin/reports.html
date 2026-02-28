@@ -27,6 +27,7 @@
               </select>
               <button class="btn-primary" type="submit">Actualizar</button>
             </form>
+            <a class="btn-secondary" href="{{ url_for('admin.edit_report', post_id=post.id) }}">Editar</a>
           </div>
         </div>
       {% endfor %}

@@ -23,8 +23,11 @@ class Post(db.Model):
     latitude = db.Column(db.Numeric(9, 6), nullable=False)
     longitude = db.Column(db.Numeric(9, 6), nullable=False)
     address = db.Column(db.String(255))
+    province = db.Column(db.String(120))
+    municipality = db.Column(db.String(120))
     polygon_geojson = db.Column(db.Text)
     links_json = db.Column(db.Text)
+    verify_count = db.Column(db.Integer, default=0)
 
     status = db.Column(post_status_enum, default="pending", nullable=False)
     is_anonymous = db.Column(db.Boolean, default=True)

@@ -4,7 +4,14 @@ from flask_login import login_required
 from app.services.authz import role_required
 from app.services.settings import get_setting, set_setting
 from app.models.post import Post
+from app.models.location_report import LocationReport
+from app.models.post_revision import PostRevision
+from app.models.post_edit_request import PostEditRequest
+from app.models.category import Category
 from app.extensions import db
+from flask_login import current_user
+import json
+from decimal import Decimal
 from . import admin_bp
 
 
@@ -39,6 +46,14 @@ def reports():
     return render_template("admin/reports.html", posts=posts, status=status)
 
 
+@admin_bp.route("/reportes-ubicacion")
+@login_required
+@role_required("administrador")
+def location_reports():
+    reports = LocationReport.query.order_by(LocationReport.created_at.desc()).all()
+    return render_template("admin/location_reports.html", reports=reports)
+
+
 @admin_bp.route("/reportes/<int:post_id>/estado", methods=["POST"])
 @login_required
 @role_required("administrador")
@@ -53,3 +68,159 @@ def update_report_status(post_id):
     db.session.commit()
     flash("Reporte actualizado.", "success")
     return redirect(url_for("admin.reports", status=request.args.get("status", "approved")))
+
+
+@admin_bp.route("/reportes/<int:post_id>/editar", methods=["GET", "POST"])
+@login_required
+@role_required("administrador")
+def edit_report(post_id):
+    post = Post.query.get_or_404(post_id)
+    categories = Category.query.order_by(Category.id.asc()).all()
+    links = []
+    if post.links_json:
+        try:
+            links = json.loads(post.links_json)
+        except Exception:
+            links = []
+
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        edit_reason = request.form.get("edit_reason", "").strip()
+        category_id = request.form.get("category_id")
+        latitude = request.form.get("latitude", "").strip()
+        longitude = request.form.get("longitude", "").strip()
+        address = request.form.get("address", "").strip()
+        province = request.form.get("province", "").strip()
+        municipality = request.form.get("municipality", "").strip()
+        polygon_geojson = request.form.get("polygon_geojson", "").strip()
+        links_list = request.form.getlist("links[]")
+        links_list = [link.strip() for link in links_list if link.strip()]
+
+        if not title or not description or not category_id or not latitude or not longitude:
+            flash("Completa todos los campos obligatorios.", "error")
+            return redirect(url_for("admin.edit_report", post_id=post.id))
+        if not edit_reason:
+            flash("El motivo de edición es obligatorio.", "error")
+            return redirect(url_for("admin.edit_report", post_id=post.id))
+
+        try:
+            lat = Decimal(latitude)
+            lng = Decimal(longitude)
+        except Exception:
+            flash("Latitud/longitud inválidas.", "error")
+            return redirect(url_for("admin.edit_report", post_id=post.id))
+
+        moderation_enabled = get_setting("moderation_enabled", "true") == "true"
+
+        editor_label = "Admin"
+        if current_user.is_authenticated:
+            if current_user.anon_code:
+                editor_label = f"Anon-{current_user.anon_code}"
+            else:
+                editor_label = current_user.email
+
+        if moderation_enabled:
+            edit_req = PostEditRequest(
+                post_id=post.id,
+                editor_id=current_user.id if current_user.is_authenticated else None,
+                editor_label=editor_label,
+                reason=edit_reason,
+                title=title,
+                description=description,
+                latitude=lat,
+                longitude=lng,
+                address=address or None,
+                province=province or None,
+                municipality=municipality or None,
+                category_id=int(category_id),
+                polygon_geojson=polygon_geojson or None,
+                links_json=json.dumps(links_list) if links_list else None,
+            )
+            db.session.add(edit_req)
+            db.session.commit()
+            flash("Edición enviada a moderación.", "success")
+            return redirect(url_for("admin.edit_report", post_id=post.id))
+
+        # Guardar revisión previa
+        revision = PostRevision(
+            post_id=post.id,
+            editor_id=current_user.id if current_user.is_authenticated else None,
+            editor_label=editor_label,
+            reason=edit_reason,
+            title=post.title,
+            description=post.description,
+            latitude=post.latitude,
+            longitude=post.longitude,
+            address=post.address,
+            province=post.province,
+            municipality=post.municipality,
+            category_id=post.category_id,
+            polygon_geojson=post.polygon_geojson,
+            links_json=post.links_json,
+        )
+        db.session.add(revision)
+
+        post.title = title
+        post.description = description
+        post.category_id = int(category_id)
+        post.latitude = lat
+        post.longitude = lng
+        post.address = address or None
+        post.province = province or None
+        post.municipality = municipality or None
+        post.polygon_geojson = polygon_geojson or None
+        post.links_json = json.dumps(links_list) if links_list else None
+        db.session.commit()
+
+        flash("Reporte actualizado.", "success")
+        return redirect(url_for("admin.edit_report", post_id=post.id))
+
+    return render_template("admin/edit_report.html", post=post, categories=categories, links=links)
+
+
+@admin_bp.route("/reportes/<int:post_id>/revisiones/<int:revision_id>/restaurar", methods=["POST"])
+@login_required
+@role_required("administrador")
+def restore_revision(post_id, revision_id):
+    post = Post.query.get_or_404(post_id)
+    revision = PostRevision.query.get_or_404(revision_id)
+    if revision.post_id != post.id:
+        flash("Revisión inválida.", "error")
+        return redirect(url_for("map.post_history", post_id=post.id))
+
+    # Guardar snapshot actual antes de restaurar
+    editor_label = current_user.email if current_user.is_authenticated else "Admin"
+    snapshot = PostRevision(
+        post_id=post.id,
+        editor_id=current_user.id if current_user.is_authenticated else None,
+        editor_label=editor_label,
+        reason="Restauración de versión anterior",
+        title=post.title,
+        description=post.description,
+        latitude=post.latitude,
+        longitude=post.longitude,
+        address=post.address,
+        province=post.province,
+        municipality=post.municipality,
+        category_id=post.category_id,
+        polygon_geojson=post.polygon_geojson,
+        links_json=post.links_json,
+    )
+    db.session.add(snapshot)
+
+    post.title = revision.title
+    post.description = revision.description
+    post.latitude = revision.latitude
+    post.longitude = revision.longitude
+    post.address = revision.address
+    post.province = revision.province
+    post.municipality = revision.municipality
+    if revision.category_id:
+        post.category_id = revision.category_id
+    post.polygon_geojson = revision.polygon_geojson
+    post.links_json = revision.links_json
+    db.session.commit()
+
+    flash("Reporte restaurado a una versión anterior.", "success")
+    return redirect(url_for("map.post_history", post_id=post.id))

@@ -105,9 +105,40 @@ function renderMarkers(posts) {
                  </div>`
               : ""
           }
+          <div style="margin-top:8px;">
+            <button id="reportLocationBtn" data-report-url="/reportar-ubicacion/${post.id}" style="background:#0f151a;border:1px solid #1f2a33;color:#6ee7b7;padding:6px 8px;border-radius:6px;cursor:pointer;">Reportar ubicación</button>
+            <button id="viewHistoryBtn" data-history-url="/reporte/${post.id}/historial" style="margin-left:6px;background:#0f151a;border:1px solid #1f2a33;color:#9bd1ff;padding:6px 8px;border-radius:6px;cursor:pointer;">Ver historial</button>
+          </div>
           ${post.address ? `<div style="font-size:12px;color:#666;">${post.address}</div>` : ""}
         </div>
       `,
+    });
+
+    google.maps.event.addListener(info, "domready", () => {
+      const reportBtn = document.getElementById("reportLocationBtn");
+      if (reportBtn) {
+        reportBtn.addEventListener("click", () => {
+          const url = reportBtn.getAttribute("data-report-url");
+          if (!url) return;
+          if (window.openReportModal) {
+            window.openReportModal(url);
+          } else {
+            window.location.href = url;
+          }
+        });
+      }
+      const historyBtn = document.getElementById("viewHistoryBtn");
+      if (historyBtn) {
+        historyBtn.addEventListener("click", () => {
+          const url = historyBtn.getAttribute("data-history-url");
+          if (!url) return;
+          if (window.openReportModal) {
+            window.openReportModal(url);
+          } else {
+            window.location.href = url;
+          }
+        });
+      }
     });
 
     marker.addListener("click", () => info.open({ anchor: marker, map }));

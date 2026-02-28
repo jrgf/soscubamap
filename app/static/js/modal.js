@@ -16,6 +16,7 @@
   }
 
   window.openReportModal = openReportModal;
+  window.closeReportModal = closeReportModal;
 
   document.querySelectorAll("[data-open-report]").forEach((btn) => {
     btn.addEventListener("click", () => {
