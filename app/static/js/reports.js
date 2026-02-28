@@ -124,6 +124,46 @@ async function initReportCard(card) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  const filters = document.getElementById("reportFilters");
+  if (filters && window.CUBA_MUNICIPALITIES) {
+    const provSelect = filters.querySelector('select[name="provincia"]');
+    const munSelect = filters.querySelector('select[name="municipio"]');
+    const municipalities = window.CUBA_MUNICIPALITIES;
+
+    const renderMunicipalities = (province, selected) => {
+      if (!munSelect) return;
+      let items = [];
+      if (province && municipalities[province]) {
+        items = municipalities[province];
+      } else {
+        Object.values(municipalities).forEach((list) => {
+          items = items.concat(list);
+        });
+        items = Array.from(new Set(items)).sort();
+      }
+      munSelect.innerHTML = `<option value="">Todos</option>` +
+        items.map((m) => `<option value="${m}" ${m === selected ? "selected" : ""}>${m}</option>`).join("");
+    };
+
+    const updateUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const prov = provSelect?.value || "";
+      const mun = munSelect?.value || "";
+      if (prov) params.set("provincia", prov); else params.delete("provincia");
+      if (mun) params.set("municipio", mun); else params.delete("municipio");
+      window.location.search = params.toString();
+    };
+
+    if (provSelect && munSelect) {
+      renderMunicipalities(provSelect.value, munSelect.value);
+      provSelect.addEventListener("change", () => {
+        renderMunicipalities(provSelect.value, "");
+        updateUrl();
+      });
+      munSelect.addEventListener("change", updateUrl);
+    }
+  }
+
   document.querySelectorAll(".report-card").forEach((card) => {
     initReportCard(card);
   });

@@ -31,10 +31,22 @@ const CATEGORY_ICONS = {
   "base-espionaje": "fa-satellite-dish",
 };
 
-function buildMarkerContent(iconClass) {
+const CATEGORY_IMAGES = {
+  "sede-pcc": "/static/img/Communist_Party_of_Cuba_logo.svg.png",
+};
+
+function buildMarkerContent(iconClass, imageUrl) {
   const wrapper = document.createElement("div");
   wrapper.className = "pin-icon";
-  wrapper.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+  if (imageUrl) {
+    const img = document.createElement("img");
+    img.src = imageUrl;
+    img.alt = "";
+    img.className = "pin-image";
+    wrapper.appendChild(img);
+  } else {
+    wrapper.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+  }
   return wrapper;
 }
 
@@ -66,6 +78,7 @@ function renderMarkers(posts) {
   posts.forEach((post) => {
     const position = { lat: post.latitude, lng: post.longitude };
     const iconClass = CATEGORY_ICONS[post.category.slug] || "fa-location-dot";
+    const imageUrl = CATEGORY_IMAGES[post.category.slug];
     let marker;
 
     if (google.maps.marker && google.maps.marker.AdvancedMarkerElement) {
@@ -73,13 +86,19 @@ function renderMarkers(posts) {
         position,
         map,
         title: post.title,
-        content: buildMarkerContent(iconClass),
+        content: buildMarkerContent(iconClass, imageUrl),
       });
     } else {
       marker = new google.maps.Marker({
         position,
         map,
         title: post.title,
+        icon: imageUrl
+          ? {
+              url: imageUrl,
+              scaledSize: new google.maps.Size(28, 28),
+            }
+          : undefined,
       });
     }
 
@@ -176,6 +195,35 @@ function renderMarkers(posts) {
     }
   });
 }
+
+window.handleNewReport = function (payload) {
+  if (!payload || !map) return;
+  if (payload.status !== "approved") {
+    refreshRecent();
+    return;
+  }
+  const position = { lat: payload.latitude, lng: payload.longitude };
+  const iconClass = CATEGORY_ICONS[payload.category?.slug] || "fa-location-dot";
+  let marker;
+  if (google.maps.marker && google.maps.marker.AdvancedMarkerElement) {
+    marker = new google.maps.marker.AdvancedMarkerElement({
+      position,
+      map,
+      title: payload.title,
+      content: buildMarkerContent(iconClass),
+    });
+  } else {
+    marker = new google.maps.Marker({
+      position,
+      map,
+      title: payload.title,
+    });
+  }
+  map.panTo(position);
+  map.setZoom(Math.max(map.getZoom(), 14));
+  markers.push(marker);
+  refreshRecent();
+};
 
 async function applyFilters() {
   const categoryId = document.getElementById("categoryFilter").value;

@@ -11,6 +11,7 @@ from app.models.role import Role
 from app.models.site_setting import SiteSetting
 from app.models.location_report import LocationReport
 from app.models.post_revision import PostRevision
+from app.services.cuba_locations import PROVINCES, MUNICIPALITIES
 from app.extensions import db
 from . import map_bp
 
@@ -90,6 +91,23 @@ def new_post():
         post.status = "pending" if moderation_enabled else "approved"
         db.session.add(post)
         db.session.commit()
+
+        payload = {
+            "id": post.id,
+            "status": post.status,
+            "title": post.title,
+            "description": post.description,
+            "latitude": float(post.latitude),
+            "longitude": float(post.longitude),
+            "address": post.address,
+            "category": {"name": post.category.name, "slug": post.category.slug},
+            "verify_count": post.verify_count or 0,
+            "created_at": post.created_at.isoformat(),
+        }
+
+        # If submitted from iframe modal, return a script that closes the modal and refreshes map
+        if request.args.get("modal") == "1":
+            return render_template("map/report_success.html", payload=payload)
 
         if moderation_enabled:
             flash("Reporte enviado a moderación.", "success")
@@ -184,23 +202,14 @@ def reports():
 
     posts = query.order_by(Post.created_at.desc()).all()
 
-    provinces = (
-        db.session.query(Post.province)
-        .filter(Post.province.isnot(None))
-        .distinct()
-        .order_by(Post.province.asc())
-        .all()
-    )
-    provinces = [p[0] for p in provinces if p[0]]
-
-    municipalities = (
-        db.session.query(Post.municipality)
-        .filter(Post.municipality.isnot(None))
-        .distinct()
-        .order_by(Post.municipality.asc())
-        .all()
-    )
-    municipalities = [m[0] for m in municipalities if m[0]]
+    provinces = PROVINCES
+    if selected_province and selected_province in MUNICIPALITIES:
+        municipalities = MUNICIPALITIES[selected_province]
+    else:
+        all_muns = []
+        for items in MUNICIPALITIES.values():
+            all_muns.extend(items)
+        municipalities = sorted(set(all_muns))
 
     return render_template(
         "map/reports.html",
@@ -209,4 +218,5 @@ def reports():
         municipalities=municipalities,
         selected_province=selected_province,
         selected_municipality=selected_municipality,
+        municipalities_map=MUNICIPALITIES,
     )

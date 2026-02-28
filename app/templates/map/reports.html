@@ -6,7 +6,7 @@
   <h1>Reportes</h1>
   <p class="muted">Filtra por provincia y municipio. Cada reporte puede ser verificado y comentado.</p>
 
-  <form method="get" class="filter-controls">
+  <form method="get" class="filter-controls" id="reportFilters">
     <label>
       Provincia
       <select name="provincia">
@@ -48,6 +48,9 @@
           <button class="btn-primary verify-btn" data-post-id="{{ post.id }}">Verificar</button>
           <span class="verify-count" id="verify-count-{{ post.id }}">{{ post.verify_count or 0 }}</span>
           <button class="btn-secondary" type="button" data-history-url="{{ url_for('map.post_history', post_id=post.id) }}">Historial</button>
+          {% if current_user.is_authenticated and current_user.has_role('administrador') %}
+            <a class="btn-secondary" href="{{ url_for('admin.edit_report', post_id=post.id) }}">Editar</a>
+          {% endif %}
         </div>
         <div class="comments" data-post-id="{{ post.id }}">
           <div class="comment-list" id="comment-list-{{ post.id }}"></div>
@@ -64,4 +67,7 @@
 </section>
 
 <script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+<script>
+  window.CUBA_MUNICIPALITIES = {{ municipalities_map|tojson }};
+</script>
 {% endblock %}

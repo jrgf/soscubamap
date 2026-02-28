@@ -240,6 +240,12 @@ body {
   font-size: 16px;
 }
 
+.pin-image {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
 .map-placeholder {
   position: absolute;
   inset: 0;

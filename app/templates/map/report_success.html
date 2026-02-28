@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Reporte enviado</title>
+  </head>
+  <body>
+    <script>
+      (function () {
+        const payload = {{ payload|tojson }};
+        if (window.parent && window.parent.onReportSubmitted) {
+          window.parent.onReportSubmitted(payload);
+        }
+      })();
+    </script>
+  </body>
+</html>

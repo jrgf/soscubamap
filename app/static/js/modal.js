@@ -4,7 +4,9 @@
   if (!modal || !frame) return;
 
   function openReportModal(url) {
-    frame.src = url || "/nuevo";
+    const target = url || "/nuevo";
+    const joiner = target.includes("?") ? "&" : "?";
+    frame.src = `${target}${joiner}modal=1`;
     modal.classList.add("open");
     modal.setAttribute("aria-hidden", "false");
   }
@@ -17,6 +19,15 @@
 
   window.openReportModal = openReportModal;
   window.closeReportModal = closeReportModal;
+
+  window.onReportSubmitted = function (payload) {
+    closeReportModal();
+    if (window.handleNewReport) {
+      window.handleNewReport(payload);
+    } else {
+      window.location.reload();
+    }
+  };
 
   document.querySelectorAll("[data-open-report]").forEach((btn) => {
     btn.addEventListener("click", () => {
