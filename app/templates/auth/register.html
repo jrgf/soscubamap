@@ -1,0 +1,16 @@
+{% extends "shared/base.html" %}
+{% block title %} | Registro{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Crear cuenta</h1>
+  <form method="post" class="form-grid">
+    <label>Email
+      <input type="email" name="email" required />
+    </label>
+    <label>Contrasena
+      <input type="password" name="password" required />
+    </label>
+    <button type="submit" class="btn-primary">Registrarme</button>
+  </form>
+</section>
+{% endblock %}

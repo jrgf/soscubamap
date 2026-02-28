@@ -1,0 +1,33 @@
+{% extends "shared/base.html" %}
+{% block title %} | Moderacion{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Moderacion</h1>
+  <p>Revisa reportes pendientes, aprueba o rechaza contenido.</p>
+
+  <div class="pending-list">
+    {% if pending %}
+      {% for post in pending %}
+        <div class="pending-card">
+          <div>
+            <h3>{{ post.title }}</h3>
+            <div class="muted">{{ post.category.name }}</div>
+            <p>{{ post.description }}</p>
+            <div class="muted">{{ post.latitude }}, {{ post.longitude }}</div>
+          </div>
+          <div class="actions">
+            <form method="post" action="{{ url_for('moderation.approve', post_id=post.id) }}">
+              <button class="btn-primary" type="submit">Aprobar</button>
+            </form>
+            <form method="post" action="{{ url_for('moderation.reject', post_id=post.id) }}">
+              <button class="btn-secondary" type="submit">Rechazar</button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="muted">No hay reportes pendientes.</div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

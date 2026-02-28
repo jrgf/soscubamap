@@ -1,0 +1,46 @@
+{% extends "shared/base.html" %}
+{% block title %} | Nuevo reporte{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Nuevo reporte</h1>
+  <p>Todos los reportes se publican como anonimos. No necesitas cuenta para enviar. Los moderadores revisaran la informacion.</p>
+
+  <form class="form-grid" method="post">
+    <label>
+      Titulo
+      <input type="text" name="title" placeholder="Ej: Detencion arbitraria" />
+    </label>
+    <label>
+      Categoria
+      <select name="category_id">
+        {% for cat in categories %}
+          <option value="{{ cat.id }}">{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Descripcion
+      <textarea name="description" rows="6"></textarea>
+    </label>
+    <div class="two-col">
+      <label>
+        Latitud
+        <input type="text" name="latitude" value="{{ preset_lat }}" />
+      </label>
+      <label>
+        Longitud
+        <input type="text" name="longitude" value="{{ preset_lng }}" />
+      </label>
+    </div>
+    <label>
+      Direccion
+      <input type="text" name="address" />
+    </label>
+    <label>
+      Imagen (URL)
+      <input type="text" name="image_url" />
+    </label>
+    <button type="submit" class="btn-primary">Enviar a moderacion</button>
+  </form>
+</section>
+{% endblock %}

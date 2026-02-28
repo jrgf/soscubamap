@@ -1,0 +1,38 @@
+{% extends "shared/base.html" %}
+{% block title %} | Donaciones{% endblock %}
+{% block content %}
+<section class="panel donate">
+  <h1>Apoya el proyecto</h1>
+  <p>Si quieres apoyar este mapa, puedes donar en Bitcoin.</p>
+
+  <div class="donate-card">
+    <div class="donate-qr">
+      <img
+        src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=bitcoin:bc1qsvypsue2xvcxag7yg2fvzgv4nnjcfvapzk22rt"
+        alt="QR de donacion"
+      />
+    </div>
+    <div class="donate-info">
+      <div class="donate-label">Direccion BTC</div>
+      <div class="donate-address" id="btcAddress">bc1qsvypsue2xvcxag7yg2fvzgv4nnjcfvapzk22rt</div>
+      <button class="btn-secondary" id="copyBtc">Copiar direccion</button>
+      <div class="donate-note">Comparte este QR para apoyar el mapa.</div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const copyBtn = document.getElementById("copyBtc");
+  copyBtn?.addEventListener("click", async () => {
+    const addr = document.getElementById("btcAddress")?.textContent || "";
+    if (!addr) return;
+    try {
+      await navigator.clipboard.writeText(addr);
+      copyBtn.textContent = "Copiado";
+      setTimeout(() => (copyBtn.textContent = "Copiar direccion"), 1500);
+    } catch (e) {
+      copyBtn.textContent = "Copia manual";
+    }
+  });
+</script>
+{% endblock %}

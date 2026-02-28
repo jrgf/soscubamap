@@ -1,0 +1,103 @@
+{% extends "shared/base.html" %}
+{% block title %} | Mapa{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>Mapa Represivo de Cuba</h1>
+    <p>Documenta y visibiliza acciones y lugares de represion. Los reportes aparecen como anonimos.</p>
+  </div>
+  <div class="status">
+    <div class="stat">
+      <span class="label">Categorias</span>
+      <span class="value">{{ categories|length }}</span>
+    </div>
+    <div class="stat">
+      <span class="label">Reportes activos</span>
+      <span class="value">{{ posts|length }}</span>
+    </div>
+  </div>
+</section>
+
+<section class="filters">
+  <div class="filter-title">Filtros</div>
+  <div class="filter-controls">
+    <label>
+      Categoria
+      <select id="categoryFilter">
+        <option value="">Todas</option>
+        {% for cat in categories %}
+          <option value="{{ cat.id }}">{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+</section>
+
+{% if categories|length == 0 %}
+  <section class="panel notice">
+    <strong>No hay categorias cargadas.</strong>
+    <div>Ejecuta: <code>python -m scripts.seed_categories</code></div>
+  </section>
+{% endif %}
+
+<section class="map-wrap">
+  <div
+    id="map"
+    class="map-canvas"
+    data-api-key="{{ google_maps_api_key }}"
+    data-map-id="{{ config.GOOGLE_MAPS_MAP_ID }}"
+    data-new-url="{{ url_for('map.new_post') }}"
+  >
+    <div class="map-placeholder">
+      <div class="map-title">Google Maps</div>
+      <div class="map-subtitle">Conecta tu API key para activar el mapa.</div>
+    </div>
+    <div class="map-hint">Haz click en el mapa para crear un reporte</div>
+  </div>
+</section>
+
+<section class="legend">
+  <div class="legend-header">
+    <div class="legend-title">Leyenda de iconos</div>
+  </div>
+  <div class="legend-grid">
+    {% for cat in categories %}
+      <div class="legend-item" data-slug="{{ cat.slug }}">
+        <span class="legend-icon">
+          <i class="fa-solid fa-location-dot"></i>
+        </span>
+        <span class="legend-label">{{ cat.name }}</span>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="live-console">
+  <div class="console-header">
+    <div class="console-title">Aportaciones recientes</div>
+    <div class="console-status">En vivo</div>
+  </div>
+  <div id="recentFeed" class="console-body">
+    <div class="console-empty">Sin aportaciones visibles aun.</div>
+  </div>
+</section>
+
+<section class="categories">
+  <h2>Categorias</h2>
+  <div class="category-grid">
+    {% for cat in categories %}
+      <div class="category-card">
+        <div class="category-name">{{ cat.name }}</div>
+        <div class="category-desc">{{ cat.description }}</div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+{% if google_maps_api_key %}
+<script async
+  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap&libraries=marker&v=beta">
+</script>
+{% endif %}
+{% endblock %}
