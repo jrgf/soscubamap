@@ -39,7 +39,7 @@
             <a class="discussion-title" href="{{ url_for('discussions.detail', post_id=post.id) }}">{{ post.title }}</a>
             <div class="discussion-meta">{{ post.author_label }} · {{ post.created_at }}</div>
           </div>
-          <div class="discussion-snippet">{{ post.body_html|safe }}</div>
+          <div class="discussion-snippet">{{ post.rendered_body_html|safe }}</div>
           <div class="discussion-actions">
             <button class="vote-btn" data-type="post" data-id="{{ post.id }}" data-value="1">▲</button>
             <span class="vote-score" id="post-score-{{ post.id }}">{{ post.score }}</span>

@@ -66,6 +66,8 @@ def index():
         )
     else:
         posts = DiscussionPost.query.order_by(DiscussionPost.created_at.desc()).all()
+    for post in posts:
+        post.rendered_body_html = post.body_html or render_markdown(post.body)
     counts = dict(
         db.session.query(DiscussionComment.post_id, func.count(DiscussionComment.id))
         .group_by(DiscussionComment.post_id)
@@ -196,14 +198,17 @@ def detail(post_id):
     roots = []
     for comment in comments:
         comment.thread_children = []
+        comment.rendered_body_html = comment.body_html or render_markdown(comment.body)
     for comment in comments:
         if comment.parent_id and comment.parent_id in comment_map:
             comment_map[comment.parent_id].thread_children.append(comment)
         else:
             roots.append(comment)
+    post_rendered = post.body_html or render_markdown(post.body)
     return render_template(
         "discussions/detail.html",
         post=post,
+        post_rendered=post_rendered,
         links=links,
         images=images,
         tags=post.tags,

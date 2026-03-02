@@ -11,7 +11,16 @@
   <div class="discussion-detail">
     <h1>{{ post.title }}</h1>
     <div class="discussion-meta">{{ post.author_label }} · {{ post.created_at }}</div>
-    <div class="discussion-body">{{ post.body_html|safe }}</div>
+    {% if images and images|length %}
+      <div class="discussion-gallery">
+        {% for item in images %}
+          <button class="discussion-gallery-thumb" type="button" data-image="{{ item.url }}" data-caption="{{ item.caption|e }}">
+            <img src="{{ item.url }}" alt="Imagen de discusión" />
+          </button>
+        {% endfor %}
+      </div>
+    {% endif %}
+    <div class="discussion-body">{{ post_rendered|safe }}</div>
     {% if tags and tags|length %}
       <div class="discussion-tags">
         {% for tag in tags %}
@@ -29,20 +38,7 @@
       </ul>
     {% endif %}
 
-    {% if images and images|length %}
-      <div class="media-grid">
-        {% for item in images %}
-          <div class="discussion-media-item">
-            <div class="media-thumb">
-              <img src="{{ item.url }}" alt="Imagen de discusión" />
-            </div>
-            {% if item.caption %}
-              <div class="muted">{{ item.caption }}</div>
-            {% endif %}
-          </div>
-        {% endfor %}
-      </div>
-    {% endif %}
+    
 
     <div class="discussion-actions">
       <button class="vote-btn" data-type="post" data-id="{{ post.id }}" data-value="1">▲</button>
@@ -54,7 +50,7 @@
   {% macro render_comment(comment, depth=0) %}
     <div class="discussion-comment" data-comment-id="{{ comment.id }}" style="margin-left: {{ depth * 18 }}px;">
       <div class="discussion-meta">{{ comment.author_label }} · {{ comment.created_at }}</div>
-      <div class="discussion-body">{{ comment.body_html|safe }}</div>
+      <div class="discussion-body">{{ comment.rendered_body_html|safe }}</div>
       <div class="discussion-actions">
         <button class="vote-btn" data-type="comment" data-id="{{ comment.id }}" data-value="1">▲</button>
         <span class="vote-score" id="comment-score-{{ comment.id }}">{{ comment.score }}</span>
@@ -109,6 +105,17 @@
     <button type="submit" class="btn-primary">Publicar comentario</button>
   </form>
 </section>
+
+<div id="discussionImageModal" class="image-modal" aria-hidden="true" data-allow-zoom="1">
+  <div class="image-modal-backdrop" data-close-discussion-image></div>
+  <div class="image-modal-content discussion-modal-content">
+    <button class="image-modal-close" type="button" data-close-discussion-image>&times;</button>
+    <button class="image-modal-nav image-modal-prev" type="button" data-discussion-nav="prev" aria-label="Imagen anterior">‹</button>
+    <button class="image-modal-nav image-modal-next" type="button" data-discussion-nav="next" aria-label="Imagen siguiente">›</button>
+    <img id="discussionImageModalImg" src="" alt="Imagen ampliada" />
+    <div class="image-modal-caption" id="discussionImageModalCaption"></div>
+  </div>
+</div>
 
 <script src="{{ url_for('static', filename='js/discussions.js') }}"></script>
 {% endblock %}

@@ -234,6 +234,81 @@ function setupReplyToggles() {
   });
 }
 
+function setupDiscussionGallery() {
+  const modal = document.getElementById("discussionImageModal");
+  const modalImg = document.getElementById("discussionImageModalImg");
+  const modalCaption = document.getElementById("discussionImageModalCaption");
+  if (!modal || !modalImg) return;
+
+  const thumbs = Array.from(document.querySelectorAll(".discussion-gallery-thumb"));
+  const navButtons = Array.from(document.querySelectorAll("[data-discussion-nav]"));
+  let currentIndex = -1;
+
+  const updateNavState = () => {
+    if (thumbs.length <= 1) {
+      navButtons.forEach((btn) => btn.classList.add("is-hidden"));
+      return;
+    }
+    navButtons.forEach((btn) => btn.classList.remove("is-hidden"));
+  };
+
+  const openAt = (index) => {
+    if (!thumbs.length) return;
+    const safeIndex = ((index % thumbs.length) + thumbs.length) % thumbs.length;
+    const target = thumbs[safeIndex];
+    const url = target.getAttribute("data-image");
+    const caption = target.getAttribute("data-caption") || "";
+    if (!url) return;
+    currentIndex = safeIndex;
+    modalImg.src = url;
+    if (modalCaption) modalCaption.textContent = caption;
+    modal.setAttribute("aria-hidden", "false");
+    modal.classList.add("open");
+    updateNavState();
+  };
+
+  const close = () => {
+    modal.setAttribute("aria-hidden", "true");
+    modal.classList.remove("open");
+    modalImg.src = "";
+    if (modalCaption) modalCaption.textContent = "";
+    currentIndex = -1;
+  };
+
+  document.querySelectorAll("[data-close-discussion-image]").forEach((btn) => {
+    btn.addEventListener("click", close);
+  });
+
+  thumbs.forEach((btn, index) => {
+    btn.addEventListener("click", () => {
+      openAt(index);
+    });
+  });
+
+  navButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (currentIndex === -1) return;
+      const direction = btn.getAttribute("data-discussion-nav");
+      if (direction === "next") {
+        openAt(currentIndex + 1);
+      } else if (direction === "prev") {
+        openAt(currentIndex - 1);
+      }
+    });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (!modal.classList.contains("open")) return;
+    if (event.key === "ArrowRight") {
+      openAt(currentIndex + 1);
+    } else if (event.key === "ArrowLeft") {
+      openAt(currentIndex - 1);
+    } else if (event.key === "Escape") {
+      close();
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   setupMarkdownEditor();
   setupLinks();
@@ -242,4 +317,5 @@ document.addEventListener("DOMContentLoaded", () => {
   setupLoadingButtons();
   setupReplyToggles();
   setupTagPicker();
+  setupDiscussionGallery();
 });
