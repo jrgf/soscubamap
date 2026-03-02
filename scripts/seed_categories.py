@@ -13,6 +13,7 @@ DEFAULT_CATEGORIES = [
     ("Sede de la Seguridad del Estado", "sede-seguridad-estado", "Instalaciones de la Seguridad del Estado."),
     ("Unidad militar", "unidad-militar", "Bases y unidades militares."),
     ("Base de espionaje", "base-espionaje", "Infraestructura de inteligencia o espionaje."),
+    ("Otros", "otros", "Reportes generales o difíciles de clasificar."),
 ]
 
 

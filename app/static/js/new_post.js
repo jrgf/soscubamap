@@ -45,6 +45,10 @@ const PLACEHOLDER_BY_SLUG = {
     title: "Ej: Base de espionaje",
     description: "Describe infraestructura, antenas, instalaciones cercanas y evidencia observable.",
   },
+  "otros": {
+    title: "Ej: Situación sin categoría clara",
+    description: "Explica por qué no encaja en las demás categorías, añade detalles verificables y referencias del lugar.",
+  },
 };
 
 function applyPlaceholders() {

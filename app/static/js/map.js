@@ -60,6 +60,7 @@ const CATEGORY_ICONS = {
   "sede-seguridad-estado": "fa-user-secret",
   "unidad-militar": "fa-person-military-pointing",
   "base-espionaje": "fa-satellite-dish",
+  "otros": "fa-circle-question",
 };
 
 const CATEGORY_IMAGES = {
