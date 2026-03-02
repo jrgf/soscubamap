@@ -756,11 +756,26 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
+  margin-top: 6px;
 }
 
 .donate-qr img {
   width: 200px;
   height: 200px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.donate-logo-wrap {
+  align-items: center;
+  justify-items: center;
+}
+
+.donate-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: #fff;
@@ -794,6 +809,8 @@ body {
 .donate-btn {
   padding: 8px 12px;
   font-size: 12px;
+  text-decoration: none;
+  margin-top: 10px;
 }
 
 @media (max-width: 700px) {

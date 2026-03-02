@@ -26,8 +26,9 @@
     </div>
 
     <div class="donate-card">
-      <div class="donate-qr">
+      <div class="donate-qr donate-logo-wrap">
         <img
+          class="donate-logo"
           src="{{ url_for('static', filename='img/icon-black.png') }}"
           alt="Buy Me a Coffee"
         />
@@ -42,10 +43,12 @@
     </div>
 
     <div class="donate-card">
-      <div class="donate-qr">
-        <div class="donate-icon">
-          <i class="fa-solid fa-hand-holding-dollar"></i>
-        </div>
+      <div class="donate-qr donate-logo-wrap">
+        <img
+          class="donate-logo"
+          src="{{ url_for('static', filename='img/qvapay.webp') }}"
+          alt="QvaPay"
+        />
       </div>
       <div class="donate-info">
         <div class="donate-label">QvaPay</div>
