@@ -22,6 +22,7 @@ from app.models.chat_message import ChatMessage
 from app.models.chat_presence import ChatPresence
 
 from app.models.post import Post
+from sqlalchemy.orm import selectinload
 from app.models.category import Category
 from . import api_bp
 
@@ -46,7 +47,7 @@ def categories():
 def posts():
     category_id = request.args.get("category_id")
     limit = request.args.get("limit")
-    query = Post.query.filter_by(status="approved")
+    query = Post.query.options(selectinload(Post.media)).filter_by(status="approved")
     if category_id:
         query = query.filter_by(category_id=int(category_id))
 
@@ -73,6 +74,7 @@ def posts():
                 "anon": f"Anon-{p.author.anon_code}" if p.author and p.author.anon_code else "Anon",
                 "polygon_geojson": p.polygon_geojson,
                 "links": json.loads(p.links_json) if p.links_json else [],
+                "media": get_media_payload(p)[:4],
                 "verify_count": p.verify_count or 0,
                 "category": {
                     "id": p.category.id,

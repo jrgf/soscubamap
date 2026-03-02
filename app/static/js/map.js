@@ -123,6 +123,19 @@ function renderMarkers(posts) {
 
     const created = post.created_at ? new Date(post.created_at) : null;
     const createdText = created ? created.toLocaleString("es-ES") : "";
+    const mediaItems = Array.isArray(post.media) ? post.media : [];
+    const mediaHtml = mediaItems.length
+      ? `<div class="info-media">
+          ${mediaItems
+            .slice(0, 4)
+            .map((item) => {
+              const url = typeof item === "string" ? item : item?.url;
+              if (!url) return "";
+              return `<img src="${url}" alt="Imagen del reporte" />`;
+            })
+            .join("")}
+        </div>`
+      : "";
     const info = new google.maps.InfoWindow({
       content: `
         <div style="color:#111;max-width:260px;">
@@ -131,6 +144,7 @@ function renderMarkers(posts) {
           <div style="font-size:12px;color:#333;margin-bottom:6px;">${post.anon || "Anon"}</div>
           ${createdText ? `<div style="font-size:12px;color:#666;margin-bottom:6px;">${createdText}</div>` : ""}
           <p style="margin:0 0 6px;">${post.description}</p>
+          ${mediaHtml}
           ${
             post.links && post.links.length
               ? `<div style="font-size:12px;margin-top:6px;">
