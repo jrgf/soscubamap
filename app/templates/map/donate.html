@@ -4,36 +4,55 @@
 {% block content %}
 <section class="panel donate">
   <h1>Apoya el proyecto</h1>
-  <p>Si quieres apoyar este mapa, puedes donar en Bitcoin.</p>
+  <p>Las donaciones sostienen el dominio, servidores y el uso de la API de Google Maps. Gracias por mantener este proyecto vivo.</p>
 
-  <div class="donate-card">
-    <div class="donate-qr">
-      <img
-        src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=bitcoin:bc1qsvypsue2xvcxag7yg2fvzgv4nnjcfvapzk22rt"
-        alt="QR de donación"
-      />
+  <div class="donate-grid">
+    <div class="donate-card">
+      <div class="donate-qr">
+        <img
+          src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=bitcoin:bc1qsvypsue2xvcxag7yg2fvzgv4nnjcfvapzk22rt"
+          alt="QR de donación en Bitcoin"
+        />
+      </div>
+      <div class="donate-info">
+        <div class="donate-label">Bitcoin</div>
+        <div class="donate-address" id="btcAddress">bc1qsvypsue2xvcxag7yg2fvzgv4nnjcfvapzk22rt</div>
+        <div class="donate-actions">
+          <button class="btn-secondary" id="copyBtc">Copiar dirección</button>
+          <a class="btn-primary donate-btn" href="bitcoin:bc1qsvypsue2xvcxag7yg2fvzgv4nnjcfvapzk22rt">Abrir wallet</a>
+        </div>
+        <div class="donate-note">Comparte este QR para apoyar el mapa.</div>
+      </div>
     </div>
-    <div class="donate-info">
-      <div class="donate-label">Dirección BTC</div>
-      <div class="donate-address" id="btcAddress">bc1qsvypsue2xvcxag7yg2fvzgv4nnjcfvapzk22rt</div>
-      <button class="btn-secondary" id="copyBtc">Copiar dirección</button>
-      <div class="donate-note">Comparte este QR para apoyar el mapa.</div>
-    </div>
-  </div>
 
-  <div class="donate-card">
-    <div class="donate-qr">
-      <img
-        src="{{ url_for('static', filename='img/icon-black.png') }}"
-        alt="Buy Me a Coffee"
-      />
+    <div class="donate-card">
+      <div class="donate-qr">
+        <img
+          src="{{ url_for('static', filename='img/icon-black.png') }}"
+          alt="Buy Me a Coffee"
+        />
+      </div>
+      <div class="donate-info">
+        <div class="donate-label">Buy Me a Coffee</div>
+        <div class="donate-note">
+          Dona de forma rápida con tarjeta o PayPal.
+        </div>
+        <a class="btn-primary donate-btn" href="https://buymeacoffee.com/soscubamap" target="_blank" rel="noopener">Donar por Buy Me a Coffee</a>
+      </div>
     </div>
-    <div class="donate-info">
-      <div class="donate-label">Buy Me a Coffee</div>
-      <div class="donate-note">
-        También puedes donar por Buy Me a Coffee. Entra a
-        <a class="donate-link" href="https://buymeacoffee.com/soscubamap" target="_blank" rel="noopener">buymeacoffee.com/soscubamap</a>,
-        elige un monto y completa el pago para apoyar el mapa.
+
+    <div class="donate-card">
+      <div class="donate-qr">
+        <div class="donate-icon">
+          <i class="fa-solid fa-hand-holding-dollar"></i>
+        </div>
+      </div>
+      <div class="donate-info">
+        <div class="donate-label">QvaPay</div>
+        <div class="donate-note">
+          Entra al enlace y elige el monto para apoyar #SOSCuba Map.
+        </div>
+        <a class="btn-primary donate-btn" href="https://soscubamap.qvpay.me/" target="_blank" rel="noopener">Donar por QvaPay</a>
       </div>
     </div>
   </div>
