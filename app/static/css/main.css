@@ -195,6 +195,34 @@ body {
   grid-template-columns: 1fr;
 }
 
+.filter-group {
+  display: grid;
+  gap: 10px;
+}
+
+.filter-label {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.filter-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px 14px;
+}
+
+.checkbox-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.checkbox-item input {
+  accent-color: var(--accent);
+}
+
 .filter-controls input {
   width: 100%;
 }
@@ -419,7 +447,7 @@ body {
 
 .legend-item {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
   border: 1px solid var(--border);
@@ -443,6 +471,20 @@ body {
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--text);
+}
+
+.legend-count {
+  justify-self: end;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #6ee7b7;
+  color: #0b0f12;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .console-header {
@@ -773,8 +815,8 @@ body {
 }
 
 .donate-logo {
-  width: 72px;
-  height: 72px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -810,7 +852,7 @@ body {
   padding: 8px 12px;
   font-size: 12px;
   text-decoration: none;
-  margin-top: 10px;
+  margin-top: 50px;
 }
 
 @media (max-width: 700px) {

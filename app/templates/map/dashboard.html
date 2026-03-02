@@ -29,15 +29,17 @@
       Buscar dirección (Cuba)
       <input id="mapSearch" type="text" placeholder="Ej: Vedado, La Habana" />
     </label>
-    <label>
-      Categoría
-      <select id="categoryFilter">
-        <option value="">Todas</option>
+    <div class="filter-group">
+      <div class="filter-label">Categorías</div>
+      <div class="filter-checkboxes" id="categoryFilter">
         {% for cat in categories %}
-          <option value="{{ cat.id }}">{{ cat.name }}</option>
+          <label class="checkbox-item">
+            <input type="checkbox" class="category-checkbox" value="{{ cat.id }}" checked />
+            <span>{{ cat.name }}</span>
+          </label>
         {% endfor %}
-      </select>
-    </label>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -76,6 +78,7 @@
           <i class="fa-solid fa-location-dot"></i>
         </span>
         <span class="legend-label">{{ cat.name }}</span>
+        <span class="legend-count" id="legend-count-{{ cat.id }}">0</span>
       </div>
     {% endfor %}
   </div>

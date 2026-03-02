@@ -7,6 +7,7 @@ let autocomplete;
 let searchMarker;
 let geocoder;
 let isAdmin = false;
+let allPosts = [];
 let lockZoom = false;
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -69,9 +70,20 @@ function clearMarkers() {
   markers = [];
 }
 
-async function loadPosts(categoryId) {
-  const params = categoryId ? `?category_id=${categoryId}` : "";
-  const res = await fetch(`/api/posts${params}`);
+function getSelectedCategoryIds() {
+  const checkboxes = document.querySelectorAll(".category-checkbox");
+  const selected = new Set();
+  checkboxes.forEach((cb) => {
+    if (cb.checked) {
+      const id = parseInt(cb.value, 10);
+      if (!Number.isNaN(id)) selected.add(id);
+    }
+  });
+  return selected;
+}
+
+async function loadPosts() {
+  const res = await fetch(`/api/posts`);
   return await res.json();
 }
 
@@ -249,9 +261,33 @@ function renderMarkers(posts) {
   });
 }
 
+function updateLegendCounts(posts) {
+  const counts = {};
+  (posts || []).forEach((post) => {
+    const id = post.category?.id;
+    if (!id) return;
+    counts[id] = (counts[id] || 0) + 1;
+  });
+
+  document.querySelectorAll(".legend-count").forEach((el) => {
+    const id = parseInt(el.id.replace("legend-count-", ""), 10);
+    const value = counts[id] || 0;
+    el.textContent = value;
+  });
+}
+
 window.handleNewReport = function (payload) {
   if (!payload || !map) return;
   if (payload.status !== "approved") {
+    refreshRecent();
+    return;
+  }
+  if (Array.isArray(allPosts)) {
+    allPosts.unshift(payload);
+  }
+  updateLegendCounts(allPosts);
+  const selected = getSelectedCategoryIds();
+  if (selected.size && payload.category?.id && !selected.has(payload.category.id)) {
     refreshRecent();
     return;
   }
@@ -281,9 +317,12 @@ window.handleNewReport = function (payload) {
 };
 
 async function applyFilters() {
-  const categoryId = document.getElementById("categoryFilter").value;
-  const posts = await loadPosts(categoryId);
-  renderMarkers(posts);
+  const selected = getSelectedCategoryIds();
+  const filtered = selected.size
+    ? allPosts.filter((post) => selected.has(post.category?.id))
+    : [];
+  updateLegendCounts(allPosts);
+  renderMarkers(filtered);
 }
 
 async function loadRecent() {
@@ -424,11 +463,14 @@ window.initMap = async function () {
     });
   }
 
+  allPosts = await loadPosts();
   await applyFilters();
   await refreshRecent();
 
-  const filter = document.getElementById("categoryFilter");
-  filter.addEventListener("change", applyFilters);
+  const filters = document.querySelectorAll(".category-checkbox");
+  filters.forEach((checkbox) => {
+    checkbox.addEventListener("change", applyFilters);
+  });
 
   clickInfo = new google.maps.InfoWindow();
   map.addListener("click", (event) => {
