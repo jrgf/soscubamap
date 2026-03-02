@@ -36,6 +36,13 @@ body {
   z-index: 10;
 }
 
+.nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+}
+
 .logo {
   display: inline-flex;
   align-items: center;
@@ -74,14 +81,13 @@ body {
 .nav-links a {
   color: var(--muted);
   text-decoration: none;
-  margin-left: 20px;
   font-size: 14px;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .nav-links button {
-  margin-left: 20px;
+  margin-left: 0;
 }
 
 .nav-links a:hover {
@@ -1207,6 +1213,10 @@ textarea {
     flex-direction: column;
     gap: 12px;
     align-items: flex-start;
+  }
+
+  .nav-links {
+    width: 100%;
   }
 
   .hero {

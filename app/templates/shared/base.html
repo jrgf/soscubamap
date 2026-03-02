@@ -83,9 +83,32 @@
     <script>
       (function () {
         const allowZoomTarget = (target) => !!(target && target.closest && target.closest("[data-allow-zoom]"));
+        let allowZoom = false;
+
+        document.addEventListener(
+          "touchstart",
+          (event) => {
+            allowZoom = allowZoomTarget(event.target);
+          },
+          { passive: true }
+        );
+        document.addEventListener(
+          "touchend",
+          () => {
+            allowZoom = false;
+          },
+          { passive: true }
+        );
+        document.addEventListener(
+          "touchcancel",
+          () => {
+            allowZoom = false;
+          },
+          { passive: true }
+        );
 
         const blockIfNeeded = (event) => {
-          if (allowZoomTarget(event.target)) return;
+          if (allowZoom) return;
           event.preventDefault();
         };
 
