@@ -35,5 +35,46 @@
       <a href="{{ url_for('admin.discussions') }}">Discusiones</a>
     </div>
   </div>
+
+  <div class="admin-section">
+    <h2>Ubicaciones reportadas</h2>
+    {% if location_reports and location_reports|length %}
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Reporte</th>
+              <th>Categoría</th>
+              <th>Fecha</th>
+              <th>Mensaje</th>
+              <th>Mapa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for report in location_reports %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('map.report_detail', post_id=report.post.id) }}">
+                    {{ report.post.title }}
+                  </a>
+                </td>
+                <td>{{ report.post.category.name }}</td>
+                <td>{{ report.created_at }}</td>
+                <td>{{ report.message }}</td>
+                <td>
+                  <a class="btn-secondary" href="{{ url_for('map.dashboard', lat=report.post.latitude, lng=report.post.longitude) }}">Ver en mapa</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:10px;">
+        <a class="btn-secondary" href="{{ url_for('admin.location_reports') }}">Ver todos</a>
+      </div>
+    {% else %}
+      <div class="muted">No hay ubicaciones reportadas.</div>
+    {% endif %}
+  </div>
 </section>
 {% endblock %}

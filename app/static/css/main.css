@@ -745,6 +745,15 @@ button[data-loading="true"]::after {
   gap: 8px;
 }
 
+.comment-delete {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
 .comment-vote {
   background: transparent;
   border: 1px solid var(--border);
@@ -1537,6 +1546,32 @@ textarea {
 .switch-label {
   margin-right: 12px;
   color: var(--muted);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-table th,
+.admin-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-table th {
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 11px;
 }
 
 .site-footer {

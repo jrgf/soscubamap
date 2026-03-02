@@ -3,7 +3,7 @@
 {% block meta_description %}Detalle del reporte en #SOSCuba Map. Verifica, comenta y colabora con ediciones transparentes.{% endblock %}
 {% block content %}
 <section class="panel">
-  <div class="report-card" data-post-id="{{ post.id }}">
+  <div class="report-card" data-post-id="{{ post.id }}" data-is-admin="{{ 1 if current_user.is_authenticated and current_user.has_role('administrador') else 0 }}">
     <div class="report-main">
       <h1>{{ post.title }}</h1>
       <div class="muted">{{ post.category.name }}</div>
@@ -33,6 +33,10 @@
       <a class="btn-secondary" href="{{ url_for('map.edit_report_public', post_id=post.id) }}">Editar</a>
       <a class="btn-secondary" href="{{ url_for('map.report_location', post_id=post.id) }}">Reportar ubicación</a>
       <a class="btn-primary" href="{{ url_for('map.dashboard', lat=post.latitude, lng=post.longitude) }}">Ver en el mapa</a>
+      {% if current_user.is_authenticated and current_user.has_role('administrador') %}
+        <button class="btn-secondary" id="hideReportBtn">Ocultar</button>
+        <button class="btn-secondary" id="deleteReportBtn">Eliminar</button>
+      {% endif %}
     </div>
 
     <div class="media-section">

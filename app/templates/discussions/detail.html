@@ -53,6 +53,11 @@
         <span class="vote-score" id="comment-score-{{ comment.id }}">{{ comment.score }}</span>
         <button class="vote-btn" data-type="comment" data-id="{{ comment.id }}" data-value="-1">▼</button>
         <button class="btn-secondary reply-toggle" type="button" data-reply-toggle="{{ comment.id }}">Responder</button>
+        {% if current_user.is_authenticated and current_user.has_role('administrador') %}
+          <form method="post" action="{{ url_for('admin.delete_discussion_comment', comment_id=comment.id) }}" onsubmit="return confirm('¿Eliminar comentario?');">
+            <button class="btn-secondary" type="submit">Eliminar</button>
+          </form>
+        {% endif %}
       </div>
       <form id="reply-form-{{ comment.id }}" class="comment-form reply-form is-hidden" method="post">
         <input type="hidden" name="parent_id" value="{{ comment.id }}" />

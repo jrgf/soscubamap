@@ -40,7 +40,16 @@ def _resolve_geo_location(lat, lng, province, municipality):
 @role_required("administrador")
 def dashboard():
     moderation_enabled = get_setting("moderation_enabled", "true") == "true"
-    return render_template("admin/dashboard.html", moderation_enabled=moderation_enabled)
+    location_reports = (
+        LocationReport.query.order_by(LocationReport.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    return render_template(
+        "admin/dashboard.html",
+        moderation_enabled=moderation_enabled,
+        location_reports=location_reports,
+    )
 
 
 @admin_bp.route("/moderacion", methods=["POST"])
@@ -135,6 +144,17 @@ def delete_discussion(post_id):
     db.session.commit()
     flash("Discusión eliminada.", "success")
     return redirect(url_for("admin.discussions"))
+
+
+@admin_bp.route("/discusiones/comentarios/<int:comment_id>/eliminar", methods=["POST"])
+@login_required
+@role_required("administrador")
+def delete_discussion_comment(comment_id):
+    comment = DiscussionComment.query.get_or_404(comment_id)
+    db.session.delete(comment)
+    db.session.commit()
+    flash("Comentario eliminado.", "success")
+    return redirect(request.referrer or url_for("admin.discussions"))
 
 
 @admin_bp.route("/reportes/<int:post_id>/estado", methods=["POST"])

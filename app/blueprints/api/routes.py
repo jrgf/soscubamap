@@ -207,6 +207,30 @@ def vote_comment(comment_id):
     return resp
 
 
+@api_bp.route("/comments/<int:comment_id>", methods=["DELETE"])
+def delete_comment(comment_id):
+    if not (current_user.is_authenticated and current_user.has_role("administrador")):
+        return jsonify({"ok": False, "error": "No autorizado."}), 403
+    comment = Comment.query.get_or_404(comment_id)
+    db.session.delete(comment)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@api_bp.route("/posts/<int:post_id>/status", methods=["POST"])
+def update_post_status(post_id):
+    if not (current_user.is_authenticated and current_user.has_role("administrador")):
+        return jsonify({"ok": False, "error": "No autorizado."}), 403
+    data = request.get_json(silent=True) or {}
+    status = data.get("status")
+    if status not in {"approved", "hidden", "deleted", "rejected", "pending"}:
+        return jsonify({"ok": False, "error": "Estado inválido."}), 400
+    post = Post.query.get_or_404(post_id)
+    post.status = status
+    db.session.commit()
+    return jsonify({"ok": True, "status": post.status})
+
+
 @api_bp.route("/discusiones/<int:post_id>/vote", methods=["POST"])
 def vote_discussion_post(post_id):
     post = DiscussionPost.query.get_or_404(post_id)

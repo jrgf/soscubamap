@@ -200,6 +200,14 @@ function renderMarkers(posts) {
             <button id="verifyBtn-${post.id}" data-verify-id="${post.id}" class="info-btn info-btn-solid">Verificar</button>
             <span id="verifyCount-${post.id}" class="info-badge">${post.verify_count ?? 0}</span>
             <button id="editBtn-${post.id}" data-edit-url="/reporte/${post.id}/editar" class="info-btn info-btn-outline">Editar</button>
+            ${
+              isAdmin
+                ? `
+                  <button id="hideBtn-${post.id}" data-status="hidden" class="info-btn info-btn-outline">Ocultar</button>
+                  <button id="deleteBtn-${post.id}" data-status="deleted" class="info-btn info-btn-outline">Eliminar</button>
+                `
+                : ""
+            }
           </div>
           ${post.address ? `<div style="font-size:12px;color:#666;">${post.address}</div>` : ""}
         </div>
@@ -288,6 +296,41 @@ function renderMarkers(posts) {
             window.location.href = url;
           }
         });
+      }
+
+      if (isAdmin) {
+        const hideBtn = document.getElementById(`hideBtn-${post.id}`);
+        const deleteBtn = document.getElementById(`deleteBtn-${post.id}`);
+        const updateStatus = async (status) => {
+          const res = await fetch(`/api/posts/${post.id}/status`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status }),
+          });
+          return await res.json();
+        };
+        if (hideBtn) {
+          hideBtn.addEventListener("click", async () => {
+            if (!confirm("¿Ocultar este reporte?")) return;
+            const result = await updateStatus("hidden");
+            if (result && result.ok) {
+              allPosts = allPosts.filter((p) => p.id !== post.id);
+              applyFilters();
+              info.close();
+            }
+          });
+        }
+        if (deleteBtn) {
+          deleteBtn.addEventListener("click", async () => {
+            if (!confirm("¿Eliminar este reporte?")) return;
+            const result = await updateStatus("deleted");
+            if (result && result.ok) {
+              allPosts = allPosts.filter((p) => p.id !== post.id);
+              applyFilters();
+              info.close();
+            }
+          });
+        }
       }
     });
 

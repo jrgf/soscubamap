@@ -13,6 +13,8 @@ function unescapeHtml(value) {
   return textarea.value;
 }
 
+let isAdmin = false;
+
 async function verifyPost(postId) {
   const res = await fetch(`/api/posts/${postId}/verify`, { method: "POST" });
   return await res.json();
@@ -62,6 +64,7 @@ function renderComments(postId, items) {
             <button class="comment-vote" data-vote="1">▲</button>
             <span class="comment-score" id="comment-score-${c.id}">${c.score}</span>
             <button class="comment-vote" data-vote="-1">▼</button>
+            ${isAdmin ? `<button class="comment-delete" data-delete="${c.id}">Eliminar</button>` : ""}
           </div>
         </div>
       `
@@ -81,6 +84,19 @@ function renderComments(postId, items) {
       }
     });
   });
+
+  if (isAdmin) {
+    list.querySelectorAll(".comment-delete").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const commentId = btn.getAttribute("data-delete");
+        if (!commentId) return;
+        if (!confirm("¿Eliminar comentario?")) return;
+        await fetch(`/api/comments/${commentId}`, { method: "DELETE" });
+        const updated = await loadComments(postId);
+        renderComments(postId, updated);
+      });
+    });
+  }
 }
 
 function setupCopyLink() {
@@ -100,15 +116,47 @@ function setupCopyLink() {
 document.addEventListener("DOMContentLoaded", async () => {
   const card = document.querySelector("[data-post-id]");
   const postId = card?.getAttribute("data-post-id");
+  isAdmin = card?.getAttribute("data-is-admin") === "1";
   if (!postId) return;
 
   const verifyBtn = document.getElementById("verifyBtn");
   const verifyCount = document.getElementById("verifyCount");
+  const hideBtn = document.getElementById("hideReportBtn");
+  const deleteBtn = document.getElementById("deleteReportBtn");
   if (verifyBtn) {
     verifyBtn.addEventListener("click", async () => {
       const result = await verifyPost(postId);
       if (verifyCount && result && typeof result.verify_count !== "undefined") {
         verifyCount.textContent = result.verify_count;
+      }
+    });
+  }
+
+  const updateStatus = async (status) => {
+    const res = await fetch(`/api/posts/${postId}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    return await res.json();
+  };
+
+  if (hideBtn) {
+    hideBtn.addEventListener("click", async () => {
+      if (!confirm("¿Ocultar este reporte?")) return;
+      const result = await updateStatus("hidden");
+      if (result && result.ok) {
+        window.location.href = "/admin/reportes?status=hidden";
+      }
+    });
+  }
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm("¿Eliminar este reporte?")) return;
+      const result = await updateStatus("deleted");
+      if (result && result.ok) {
+        window.location.href = "/admin/reportes?status=deleted";
       }
     });
   }

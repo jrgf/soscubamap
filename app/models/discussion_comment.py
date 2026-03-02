@@ -8,7 +8,7 @@ class DiscussionComment(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey("discussion_posts.id"), nullable=False)
-    parent_id = db.Column(db.Integer, db.ForeignKey("discussion_comments.id"))
+    parent_id = db.Column(db.Integer, db.ForeignKey("discussion_comments.id", ondelete="CASCADE"))
     body = db.Column(db.Text, nullable=False)
     body_html = db.Column(db.Text, nullable=False)
     author_label = db.Column(db.String(80), nullable=False)
@@ -21,6 +21,7 @@ class DiscussionComment(db.Model):
         "DiscussionComment",
         cascade="all, delete-orphan",
         single_parent=True,
+        passive_deletes=True,
         backref=db.backref("parent", remote_side=[id]),
     )
 
