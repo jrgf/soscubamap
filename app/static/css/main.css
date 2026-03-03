@@ -675,8 +675,9 @@ body {
 }
 
 .image-preview-card img {
-  width: 100%;
-  max-height: 200px;
+  width: 300px;
+  height: 200px;
+  max-width: 100%;
   object-fit: cover;
   border-radius: 8px;
 }
@@ -1055,6 +1056,30 @@ button[data-loading="true"]::after {
   display: grid;
   gap: 12px;
   margin-bottom: 20px;
+}
+
+.discussion-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.discussion-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #0b1014;
+  flex: 0 0 auto;
+}
+
+.discussion-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .discussion-page .comment-form {

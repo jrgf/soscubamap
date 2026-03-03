@@ -36,6 +36,11 @@
       {% for post in posts %}
         <div class="discussion-item">
           <div class="discussion-head">
+            {% if post.thumbnail_url %}
+              <div class="discussion-thumb">
+                <img src="{{ post.thumbnail_url }}" alt="Imagen de discusión" />
+              </div>
+            {% endif %}
             <a class="discussion-title" href="{{ url_for('discussions.detail', post_id=post.id) }}">{{ post.title }}</a>
             <div class="discussion-meta">{{ post.author_label }} · {{ post.created_at }}</div>
           </div>

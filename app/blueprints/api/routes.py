@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta
 from flask_login import current_user
 
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models.comment import Comment
 from app.models.user import User
 from app.models.role import Role
@@ -128,6 +128,7 @@ def _get_or_create_anon_user():
 
 
 @api_bp.route("/posts/<int:post_id>/verify", methods=["POST"])
+@limiter.limit("10/minute; 200/day")
 def verify_post(post_id):
     post = Post.query.get_or_404(post_id)
     cookie_key = f"verified_{post_id}"
@@ -143,6 +144,7 @@ def verify_post(post_id):
 
 
 @api_bp.route("/posts/<int:post_id>/comments", methods=["GET", "POST"])
+@limiter.limit("10/minute; 200/day", methods=["POST"])
 def comments(post_id):
     post = Post.query.get_or_404(post_id)
     if request.method == "POST":
@@ -179,6 +181,7 @@ def comments(post_id):
 
 
 @api_bp.route("/comments/<int:comment_id>/vote", methods=["POST"])
+@limiter.limit("30/minute; 500/day")
 def vote_comment(comment_id):
     comment = Comment.query.get_or_404(comment_id)
     data = request.get_json(silent=True) or {}
@@ -232,6 +235,7 @@ def vote_comment(comment_id):
 
 
 @api_bp.route("/comments/<int:comment_id>", methods=["DELETE"])
+@limiter.limit("10/minute; 100/day")
 def delete_comment(comment_id):
     if not (current_user.is_authenticated and current_user.has_role("administrador")):
         return jsonify({"ok": False, "error": "No autorizado."}), 403
@@ -309,6 +313,7 @@ def vote_discussion_post(post_id):
 
 
 @api_bp.route("/discusiones/comentarios/<int:comment_id>/vote", methods=["POST"])
+@limiter.limit("30/minute; 500/day")
 def vote_discussion_comment(comment_id):
     comment = DiscussionComment.query.get_or_404(comment_id)
     data = request.get_json(silent=True) or {}
@@ -362,6 +367,7 @@ def vote_discussion_comment(comment_id):
 
 
 @api_bp.route("/posts/<int:post_id>/media", methods=["POST"])
+@limiter.limit("6/hour; 30/day")
 def upload_post_media(post_id):
     post = Post.query.get_or_404(post_id)
     files = [
@@ -451,6 +457,8 @@ def upload_post_media(post_id):
 
 
 @api_bp.route("/chat", methods=["GET", "POST"])
+@limiter.limit("60/minute", methods=["GET"])
+@limiter.limit("6/minute; 120/day", methods=["POST"])
 def chat_messages():
     now = datetime.utcnow()
     cutoff_keep = now - timedelta(hours=48)

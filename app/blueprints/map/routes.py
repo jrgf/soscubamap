@@ -21,7 +21,7 @@ from app.services.media_upload import (
     validate_files,
     upload_files,
 )
-from app.extensions import db
+from app.extensions import db, limiter
 from . import map_bp
 
 
@@ -89,6 +89,7 @@ def dashboard():
 
 
 @map_bp.route("/nuevo", methods=["GET", "POST"])
+@limiter.limit("3/minute; 30/day", methods=["POST"])
 def new_post():
     categories = Category.query.order_by(Category.id.asc()).all()
     if request.method == "POST":
@@ -230,6 +231,7 @@ def about():
 
 
 @map_bp.route("/reportar-ubicacion/<int:post_id>", methods=["GET", "POST"])
+@limiter.limit("5/minute; 50/day", methods=["POST"])
 def report_location(post_id):
     post = Post.query.get_or_404(post_id)
     submitted = False
@@ -258,9 +260,27 @@ def _get_or_create_anon_editor():
     return anon_user
 
 
+def _is_admin_user():
+    return current_user.is_authenticated and current_user.has_role("administrador")
+
+
+def _is_edit_locked(post: Post) -> bool:
+    return (post.verify_count or 0) >= 10 and not _is_admin_user()
+
+
 @map_bp.route("/reporte/<int:post_id>/editar", methods=["GET", "POST"])
+@limiter.limit("3/minute; 30/day", methods=["POST"])
 def edit_report_public(post_id):
     post = Post.query.get_or_404(post_id)
+    if _is_edit_locked(post):
+        message = (
+            "Este reporte ya tiene 10 verificaciones y solo el admin puede editarlo. "
+            "Aun puedes comentar notas y reportar ubicacion si detectas un dato erroneo."
+        )
+        if request.args.get("modal") == "1":
+            return render_template("map/edit_locked.html", message=message, post_id=post.id)
+        flash(message, "error")
+        return redirect(url_for("map.report_detail", post_id=post.id))
     categories = Category.query.order_by(Category.id.asc()).all()
     links = []
     if post.links_json:
@@ -456,6 +476,7 @@ def report_detail(post_id):
         anon_label=anon_label,
         media_items=get_media_payload(post),
         moderation_enabled=moderation_enabled,
+        edit_locked=_is_edit_locked(post),
     )
 
 

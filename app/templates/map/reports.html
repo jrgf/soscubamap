@@ -50,7 +50,11 @@
           <button class="btn-secondary detail-btn" type="button" data-detail-url="{{ url_for('map.report_detail', post_id=post.id) }}">Ver detalle</button>
           <button class="btn-secondary copy-link-btn" type="button" data-copy-url="{{ url_for('map.report_detail', post_id=post.id) }}">Copiar enlace</button>
           <button class="btn-secondary" type="button" data-history-url="{{ url_for('map.post_history', post_id=post.id) }}">Historial</button>
-          <button class="btn-secondary edit-btn" type="button" data-edit-url="{{ url_for('map.edit_report_public', post_id=post.id) }}">Editar</button>
+          {% if not ((post.verify_count or 0) >= 10 and not (current_user.is_authenticated and current_user.has_role('administrador'))) %}
+            <button class="btn-secondary edit-btn" type="button" data-edit-url="{{ url_for('map.edit_report_public', post_id=post.id) }}">Editar</button>
+          {% else %}
+            <span class="muted">Edición bloqueada: 10+ verificaciones. Puedes comentar y reportar ubicación si hay datos erróneos.</span>
+          {% endif %}
           <button class="btn-primary map-btn" type="button" data-map-lat="{{ post.latitude }}" data-map-lng="{{ post.longitude }}">Ver en el mapa</button>
         </div>
         <div class="comments" data-post-id="{{ post.id }}">

@@ -1,5 +1,6 @@
 from flask import Flask
-from .extensions import db, migrate, login_manager
+from werkzeug.middleware.proxy_fix import ProxyFix
+from .extensions import db, migrate, login_manager, limiter
 from .blueprints.auth import auth_bp
 from .blueprints.map import map_bp
 from .blueprints.admin import admin_bp
@@ -15,6 +16,10 @@ def create_app(config_object="config.settings.Config"):
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    limiter.init_app(app)
+
+    if app.config.get("TRUST_PROXY_HEADERS", True):
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(map_bp)

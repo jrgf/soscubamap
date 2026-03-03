@@ -4,7 +4,7 @@ from flask import render_template, request, redirect, url_for, flash, session
 from sqlalchemy import func
 from flask_login import current_user
 
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models.discussion_post import DiscussionPost
 from app.models.discussion_comment import DiscussionComment
 from app.models.discussion_tag import DiscussionTag
@@ -68,6 +68,8 @@ def index():
         posts = DiscussionPost.query.order_by(DiscussionPost.created_at.desc()).all()
     for post in posts:
         post.rendered_body_html = post.body_html or render_markdown(post.body)
+        images = parse_media_json(post.images_json)
+        post.thumbnail_url = images[0]["url"] if images else None
     counts = dict(
         db.session.query(DiscussionComment.post_id, func.count(DiscussionComment.id))
         .group_by(DiscussionComment.post_id)
@@ -91,6 +93,7 @@ def index():
 
 
 @discussions_bp.route("/discusiones/nueva", methods=["GET", "POST"])
+@limiter.limit("3/minute; 30/day", methods=["POST"])
 def new_discussion():
     if request.method == "POST":
         title = request.form.get("title", "").strip()
@@ -152,6 +155,7 @@ def new_discussion():
 
 
 @discussions_bp.route("/discusiones/<int:post_id>", methods=["GET", "POST"])
+@limiter.limit("6/minute; 120/day", methods=["POST"])
 def detail(post_id):
     post = DiscussionPost.query.get_or_404(post_id)
 

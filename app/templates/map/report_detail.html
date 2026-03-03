@@ -30,7 +30,13 @@
       <span class="verify-count" id="verifyCount">{{ post.verify_count or 0 }}</span>
       <button class="btn-secondary" id="copyLinkBtn">Copiar enlace</button>
       <a class="btn-secondary" href="{{ url_for('map.post_history', post_id=post.id) }}">Historial</a>
-      <a class="btn-secondary" href="{{ url_for('map.edit_report_public', post_id=post.id) }}">Editar</a>
+      {% if not edit_locked %}
+        <a class="btn-secondary" href="{{ url_for('map.edit_report_public', post_id=post.id) }}">Editar</a>
+      {% else %}
+        <span class="muted">
+          Edición bloqueada: el reporte tiene 10+ verificaciones. Puedes comentar notas y reportar ubicación si hay datos erróneos.
+        </span>
+      {% endif %}
       <a class="btn-secondary" href="{{ url_for('map.report_location', post_id=post.id) }}">Reportar ubicación</a>
       <a class="btn-primary" href="{{ url_for('map.dashboard', lat=post.latitude, lng=post.longitude) }}">Ver en el mapa</a>
       {% if current_user.is_authenticated and current_user.has_role('administrador') %}

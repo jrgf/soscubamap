@@ -179,6 +179,7 @@ function renderMarkers(posts) {
             .join("")}
         </div>`
       : "";
+    const editLocked = !isAdmin && (post.verify_count ?? 0) >= 10;
     const info = new google.maps.InfoWindow({
       content: `
         <div style="color:#111;max-width:260px;">
@@ -207,7 +208,11 @@ function renderMarkers(posts) {
             <button id="viewHistoryBtn" data-history-url="/reporte/${post.id}/historial" class="info-btn info-btn-outline info-btn-blue">Ver historial</button>
             <button id="verifyBtn-${post.id}" data-verify-id="${post.id}" class="info-btn info-btn-solid">Verificar</button>
             <span id="verifyCount-${post.id}" class="info-badge">${post.verify_count ?? 0}</span>
-            <button id="editBtn-${post.id}" data-edit-url="/reporte/${post.id}/editar" class="info-btn info-btn-outline">Editar</button>
+            ${
+              editLocked
+                ? `<span style="font-size:11px;color:#777;">Edición bloqueada: 10+ verificaciones. Puedes comentar y reportar ubicación si hay datos erróneos.</span>`
+                : `<button id="editBtn-${post.id}" data-edit-url="/reporte/${post.id}/editar" class="info-btn info-btn-outline">Editar</button>`
+            }
             ${
               isAdmin
                 ? `
