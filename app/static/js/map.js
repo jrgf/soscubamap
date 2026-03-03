@@ -1,5 +1,6 @@
 let map;
 let markers = [];
+let markerIndex = new Map();
 let clickInfo;
 let recentTimer;
 let searchBox;
@@ -99,6 +100,7 @@ function clearMarkers() {
   markers = [];
   pendingMarkers.forEach((marker) => marker.setMap(null));
   pendingMarkers = [];
+  markerIndex = new Map();
 }
 
 function getSelectedCategoryIds() {
@@ -349,6 +351,7 @@ function renderMarkers(posts) {
 
     marker.addListener("click", () => info.open({ anchor: marker, map }));
     markers.push(marker);
+    markerIndex.set(post.id, { marker, info, post });
 
     if (post.polygon_geojson) {
       try {
@@ -381,6 +384,17 @@ function renderMarkers(posts) {
       }
     }
   });
+}
+
+function openPostOnMap(post) {
+  if (!post || !map) return;
+  const position = { lat: post.latitude, lng: post.longitude };
+  map.panTo(position);
+  map.setZoom(Math.max(map.getZoom(), 14));
+  const entry = markerIndex.get(post.id);
+  if (entry && entry.info) {
+    entry.info.open({ anchor: entry.marker, map });
+  }
 }
 
 function updateLegendCounts(posts) {
@@ -513,14 +527,14 @@ function renderRecent(posts) {
       (post) => `
         <div class="console-item">
           <div>
-            <div class="console-title-row">${post.title}</div>
+            <button class="console-title-row console-link" type="button" data-detail-url="/reporte/${post.id}">${post.title}</button>
             <div class="console-meta">${post.category.name}</div>
             <div class="console-meta">${post.anon || "Anon"}</div>
           </div>
           <div class="console-side">
             <div class="console-coords">${post.latitude.toFixed(4)}, ${post.longitude.toFixed(4)}</div>
             <div class="console-time">${post.created_at ? new Date(post.created_at).toLocaleString("es-ES") : ""}</div>
-            <button class="btn-secondary console-btn" data-pan-lat="${post.latitude}" data-pan-lng="${post.longitude}">Ver en mapa</button>
+            <button class="btn-secondary console-btn" data-pan-lat="${post.latitude}" data-pan-lng="${post.longitude}" data-post-id="${post.id}">Ver en mapa</button>
           </div>
         </div>
       `
@@ -532,8 +546,25 @@ function renderRecent(posts) {
       const lat = parseFloat(btn.getAttribute("data-pan-lat"));
       const lng = parseFloat(btn.getAttribute("data-pan-lng"));
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || !map) return;
-      map.panTo({ lat, lng });
-      map.setZoom(Math.max(map.getZoom(), 14));
+      const postId = parseInt(btn.getAttribute("data-post-id"), 10);
+      const post = allPosts.find((p) => p.id === postId) || { id: postId, latitude: lat, longitude: lng };
+      openPostOnMap(post);
+      const mapEl = document.getElementById("map");
+      if (mapEl) {
+        mapEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+  });
+
+  container.querySelectorAll(".console-link").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const url = btn.getAttribute("data-detail-url");
+      if (!url) return;
+      if (window.openReportModal) {
+        window.openReportModal(url);
+      } else {
+        window.location.href = url;
+      }
     });
   });
 }

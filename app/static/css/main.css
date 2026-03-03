@@ -547,6 +547,22 @@ body {
   font-size: 14px;
 }
 
+.console-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.console-link:hover {
+  color: var(--accent);
+}
+
 .console-meta {
   font-size: 11px;
   text-transform: uppercase;
