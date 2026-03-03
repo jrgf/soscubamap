@@ -102,6 +102,12 @@
       Comentario
       <textarea name="comment_body" rows="5" required placeholder="Responde con contexto y fuentes"></textarea>
     </label>
+    {% if recaptcha_site_key %}
+      <div class="recaptcha-wrap">
+        <div class="g-recaptcha" id="discussionCommentRecaptcha" data-sitekey="{{ recaptcha_site_key }}"></div>
+      </div>
+      <div class="field-error-msg" id="discussionRecaptchaStatus"></div>
+    {% endif %}
     <button type="submit" class="btn-primary">Publicar comentario</button>
   </form>
 </section>
@@ -118,4 +124,7 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/discussions.js') }}"></script>
+{% if recaptcha_site_key %}
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+{% endif %}
 {% endblock %}

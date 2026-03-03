@@ -25,11 +25,11 @@ async function loadComments(postId) {
   return await res.json();
 }
 
-async function addComment(postId, body) {
+async function addComment(postId, body, recaptcha) {
   const res = await fetch(`/api/posts/${postId}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, recaptcha }),
   });
   return await res.json();
 }
@@ -162,14 +162,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   const form = document.querySelector(".comment-form");
+  const commentStatus = document.getElementById("commentStatus");
   if (form) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (commentStatus) commentStatus.textContent = "";
       const textarea = form.querySelector("textarea");
       const body = textarea?.value.trim();
       if (!body) return;
-      await addComment(postId, body);
+      let token = "";
+      const recaptchaEl = document.getElementById("reportCommentRecaptcha");
+      if (recaptchaEl && !window.grecaptcha) {
+        if (commentStatus) {
+          commentStatus.textContent = "reCAPTCHA aún está cargando. Intenta de nuevo.";
+        }
+        return;
+      }
+      if (window.grecaptcha) {
+        token = grecaptcha.getResponse();
+      }
+      if (window.grecaptcha && !token) {
+        if (commentStatus) {
+          commentStatus.textContent = "Completa el reCAPTCHA antes de enviar.";
+        }
+        return;
+      }
+      const result = await addComment(postId, body, token);
+      if (result && result.ok === false) {
+        if (commentStatus) {
+          commentStatus.textContent = result.error || "No se pudo enviar el comentario.";
+        }
+        return;
+      }
       textarea.value = "";
+      if (window.grecaptcha) {
+        grecaptcha.reset();
+      }
       const items = await loadComments(postId);
       renderComments(postId, items);
     });

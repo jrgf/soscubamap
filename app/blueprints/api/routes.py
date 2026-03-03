@@ -6,6 +6,8 @@ from flask_login import current_user
 
 from app.extensions import db, limiter
 from app.services.input_safety import has_malicious_input
+from app.services.recaptcha import verify_recaptcha, recaptcha_enabled
+from app.services.text_sanitize import sanitize_text
 from app.models.comment import Comment
 from app.models.user import User
 from app.models.role import Role
@@ -152,7 +154,11 @@ def comments(post_id):
     post = Post.query.get_or_404(post_id)
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
-        body = (data.get("body") or "").strip()
+        body = sanitize_text(data.get("body") or "", max_len=4000)
+        if recaptcha_enabled():
+            token = (data.get("recaptcha") or "").strip()
+            if not verify_recaptcha(token, request.remote_addr):
+                return jsonify({"ok": False, "error": "Verificación reCAPTCHA falló."}), 400
         if has_malicious_input([body]):
             return jsonify({"ok": False, "error": "Contenido sospechoso."}), 400
         if not body:
@@ -487,8 +493,8 @@ def chat_messages():
 
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
-        body = (data.get("body") or "").strip()
-        nickname = (data.get("nickname") or "").strip()
+        body = sanitize_text(data.get("body") or "", max_len=1000)
+        nickname = sanitize_text(data.get("nickname") or "", max_len=80)
 
         if has_malicious_input([body, nickname]):
             return jsonify({"ok": False, "error": "Contenido sospechoso."}), 400

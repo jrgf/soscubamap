@@ -720,6 +720,7 @@ def report_detail(post_id):
         media_items=get_media_payload(post),
         moderation_enabled=moderation_enabled,
         edit_locked=_is_edit_locked(post),
+        recaptcha_site_key=current_app.config.get("RECAPTCHA_V2_SITE_KEY"),
     )
 
 

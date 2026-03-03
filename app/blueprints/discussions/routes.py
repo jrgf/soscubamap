@@ -179,6 +179,11 @@ def detail(post_id):
         body = request.form.get("comment_body", "").strip()
         nickname = request.form.get("comment_nickname", "").strip()
         parent_id = request.form.get("parent_id", "").strip()
+        if recaptcha_enabled():
+            token = request.form.get("g-recaptcha-response", "")
+            if not verify_recaptcha(token, request.remote_addr):
+                flash("Verificación reCAPTCHA falló. Intenta nuevamente.", "error")
+                return redirect(url_for("discussions.detail", post_id=post.id))
         if has_malicious_input([body, nickname]):
             flash("Se detectó contenido sospechoso. Revisa y vuelve a intentar.", "error")
             return redirect(url_for("discussions.detail", post_id=post.id))
@@ -237,4 +242,5 @@ def detail(post_id):
         tags=post.tags,
         comments=roots,
         nick=_get_discussion_nick(),
+        recaptcha_site_key=current_app.config.get("RECAPTCHA_V2_SITE_KEY"),
     )

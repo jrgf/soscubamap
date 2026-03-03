@@ -21,6 +21,21 @@ const CUBA_BOUNDS = {
   east: -73.0,
 };
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function safeUrl(value) {
+  const url = String(value || "").trim();
+  if (!/^https?:\/\//i.test(url)) return "";
+  return url.replaceAll("\"", "%22").replaceAll("'", "%27");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const filters = document.querySelector(".filters");
   const toggle = document.getElementById("filtersToggle");
@@ -157,6 +172,11 @@ function renderMarkers(posts) {
 
     const created = post.created_at ? new Date(post.created_at) : null;
     const createdText = created ? created.toLocaleString("es-ES") : "";
+    const safeTitle = escapeHtml(post.title);
+    const safeCategory = escapeHtml(post.category?.name || "");
+    const safeAnon = escapeHtml(post.anon || "Anon");
+    const safeDescription = escapeHtml(post.description || "");
+    const safeAddress = escapeHtml(post.address || "");
     const mediaItems = Array.isArray(post.media) ? post.media : [];
     const mediaHtml = mediaItems.length
       ? `<div class="info-media">
@@ -166,12 +186,7 @@ function renderMarkers(posts) {
               const url = typeof item === "string" ? item : item?.url;
               if (!url) return "";
               const caption = typeof item === "string" ? "" : item?.caption || "";
-              const safeCaption = caption
-                .replaceAll("&", "&amp;")
-                .replaceAll("<", "&lt;")
-                .replaceAll(">", "&gt;")
-                .replaceAll("\"", "&quot;")
-                .replaceAll("'", "&#39;");
+              const safeCaption = escapeHtml(caption);
               return `
                 <button class="info-media-thumb" type="button" data-image="${url}" data-caption="${safeCaption}">
                   <img src="${url}" alt="Imagen del reporte" />
@@ -185,20 +200,22 @@ function renderMarkers(posts) {
     const info = new google.maps.InfoWindow({
       content: `
         <div style="color:#111;max-width:260px;">
-          <h3 style="margin:0 0 6px;">${post.title}</h3>
-          <div style="font-size:12px;color:#555;margin-bottom:6px;">${post.category.name}</div>
-          <div style="font-size:12px;color:#333;margin-bottom:6px;">${post.anon || "Anon"}</div>
+          <h3 style="margin:0 0 6px;">${safeTitle}</h3>
+          <div style="font-size:12px;color:#555;margin-bottom:6px;">${safeCategory}</div>
+          <div style="font-size:12px;color:#333;margin-bottom:6px;">${safeAnon}</div>
           ${createdText ? `<div style="font-size:12px;color:#666;margin-bottom:6px;">${createdText}</div>` : ""}
-          <p style="margin:0 0 6px;">${post.description}</p>
+          <p style="margin:0 0 6px;">${safeDescription}</p>
           ${mediaHtml}
           ${
             post.links && post.links.length
               ? `<div style="font-size:12px;margin-top:6px;">
                    ${post.links
-                     .map(
-                       (link) =>
-                         `<div><a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a></div>`
-                     )
+                     .map((link) => {
+                       const href = safeUrl(link);
+                       if (!href) return "";
+                       const label = escapeHtml(link);
+                       return `<div><a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a></div>`;
+                     })
                      .join("")}
                 </div>`
               : ""
@@ -224,7 +241,7 @@ function renderMarkers(posts) {
                 : ""
             }
           </div>
-          ${post.address ? `<div style="font-size:12px;color:#666;">${post.address}</div>` : ""}
+          ${post.address ? `<div style="font-size:12px;color:#666;">${safeAddress}</div>` : ""}
         </div>
       `,
     });
@@ -523,13 +540,16 @@ function renderRecent(posts) {
   }
 
   container.innerHTML = posts
-    .map(
-      (post) => `
+    .map((post) => {
+      const safeTitle = escapeHtml(post.title || "");
+      const safeCategory = escapeHtml(post.category?.name || "");
+      const safeAnon = escapeHtml(post.anon || "Anon");
+      return `
         <div class="console-item">
           <div>
-            <button class="console-title-row console-link" type="button" data-detail-url="/reporte/${post.id}">${post.title}</button>
-            <div class="console-meta">${post.category.name}</div>
-            <div class="console-meta">${post.anon || "Anon"}</div>
+            <button class="console-title-row console-link" type="button" data-detail-url="/reporte/${post.id}">${safeTitle}</button>
+            <div class="console-meta">${safeCategory}</div>
+            <div class="console-meta">${safeAnon}</div>
           </div>
           <div class="console-side">
             <div class="console-coords">${post.latitude.toFixed(4)}, ${post.longitude.toFixed(4)}</div>
@@ -537,8 +557,8 @@ function renderRecent(posts) {
             <button class="btn-secondary console-btn" data-pan-lat="${post.latitude}" data-pan-lng="${post.longitude}" data-post-id="${post.id}">Ver en mapa</button>
           </div>
         </div>
-      `
-    )
+      `;
+    })
     .join("");
 
   container.querySelectorAll("[data-pan-lat]").forEach((btn) => {

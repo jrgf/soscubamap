@@ -234,6 +234,39 @@ function setupReplyToggles() {
   });
 }
 
+function setupCommentRecaptcha() {
+  const forms = document.querySelectorAll("form.comment-form");
+  if (!forms.length) return;
+  if (!window.grecaptcha) {
+    setTimeout(setupCommentRecaptcha, 400);
+    return;
+  }
+  const status = document.getElementById("discussionRecaptchaStatus");
+
+  forms.forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      const token = grecaptcha.getResponse();
+      if (!token) {
+        event.preventDefault();
+        if (status) {
+          status.textContent = "Completa el reCAPTCHA antes de enviar.";
+        } else {
+          alert("Completa el reCAPTCHA antes de enviar.");
+        }
+        return;
+      }
+      let hidden = form.querySelector('input[name="g-recaptcha-response"]');
+      if (!hidden) {
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = "g-recaptcha-response";
+        form.appendChild(hidden);
+      }
+      hidden.value = token;
+    });
+  });
+}
+
 function setupDiscussionGallery() {
   const modal = document.getElementById("discussionImageModal");
   const modalImg = document.getElementById("discussionImageModalImg");
@@ -316,6 +349,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupVotes();
   setupLoadingButtons();
   setupReplyToggles();
+  setupCommentRecaptcha();
   setupTagPicker();
   setupDiscussionGallery();
 });
