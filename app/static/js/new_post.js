@@ -272,6 +272,11 @@ function setupProvinceMunicipality() {
   const municipalities = window.CUBA_MUNICIPALITIES || {};
   if (!provSelect || !munSelect) return;
 
+  const selectedProv = provSelect.dataset.selected || provSelect.value;
+  if (selectedProv) {
+    provSelect.value = selectedProv;
+  }
+
   const renderMunicipalities = (province, selected) => {
     let items = [];
     if (province && municipalities[province]) {

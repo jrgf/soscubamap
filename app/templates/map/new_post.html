@@ -5,6 +5,8 @@
 <section class="panel">
   {% set use_form = form_data is not none %}
   {% set fd = form_data or {} %}
+  {% set default_province = fd.province if use_form else (preset_province or '') %}
+  {% set default_municipality = fd.municipality if use_form else (preset_municipality or '') %}
   <h1>Nuevo reporte</h1>
   <p>Todos los reportes se publican como anónimos. No necesitas cuenta para enviar. Los moderadores revisarán la información.</p>
   {% if errors.get("form") %}
@@ -104,10 +106,10 @@
     <div class="two-col">
       <label>
         Provincia
-        <select name="province" id="provinceSelect" required class="{{ 'field-error' if errors.get('province') else '' }}">
-          <option value="" disabled {% if not use_form or not fd.province %}selected{% endif %}>Elige provincia</option>
+        <select name="province" id="provinceSelect" required class="{{ 'field-error' if errors.get('province') else '' }}" data-selected="{{ default_province }}">
+          <option value="" disabled {% if not default_province %}selected{% endif %}>Elige provincia</option>
           {% for prov in provinces %}
-            <option value="{{ prov }}" {% if use_form and fd.province == prov %}selected{% endif %}>{{ prov }}</option>
+            <option value="{{ prov }}" {% if default_province == prov %}selected{% endif %}>{{ prov }}</option>
           {% endfor %}
         </select>
         {% if errors.get("province") %}
@@ -116,7 +118,7 @@
       </label>
       <label>
         Municipio
-        <select name="municipality" id="municipalitySelect" data-selected="{{ fd.municipality if use_form else '' }}" required class="{{ 'field-error' if errors.get('municipality') else '' }}">
+        <select name="municipality" id="municipalitySelect" data-selected="{{ default_municipality }}" required class="{{ 'field-error' if errors.get('municipality') else '' }}">
           <option value="" disabled selected>Elige municipio</option>
         </select>
         {% if errors.get("municipality") %}

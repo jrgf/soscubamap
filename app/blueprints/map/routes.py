@@ -313,6 +313,16 @@ def new_post():
     preset_lat = request.args.get("lat", "")
     preset_lng = request.args.get("lng", "")
     preset_zoom = request.args.get("zoom", "")
+    preset_province = ""
+    preset_municipality = ""
+    if preset_lat and preset_lng:
+        try:
+            lat = Decimal(preset_lat)
+            lng = Decimal(preset_lng)
+            preset_province, preset_municipality = _resolve_geo_location(lat, lng, "", "")
+        except Exception:
+            preset_province = ""
+            preset_municipality = ""
     moderation_setting = SiteSetting.query.filter_by(key="moderation_enabled").first()
     moderation_enabled = True
     if moderation_setting:
@@ -324,6 +334,8 @@ def new_post():
         preset_lat=preset_lat,
         preset_lng=preset_lng,
         preset_zoom=preset_zoom,
+        preset_province=preset_province,
+        preset_municipality=preset_municipality,
         moderation_enabled=moderation_enabled,
         provinces=list_provinces(),
         municipalities_map=municipalities_map(),
