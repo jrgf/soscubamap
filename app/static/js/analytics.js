@@ -175,15 +175,7 @@ const destroyChart = (id) => {
   }
 };
 
-const ensureCanvasHeight = () => {
-  document.querySelectorAll(".analytics-card canvas").forEach((canvas) => {
-    canvas.style.height = "240px";
-  });
-};
-
 const renderCharts = (payload) => {
-  ensureCanvasHeight();
-
   destroyChart("reportsOverTime");
   destroyChart("moderationStatus");
   destroyChart("categoryDistribution");
