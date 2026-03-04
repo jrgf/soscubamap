@@ -36,7 +36,12 @@ from app.services.push_notifications import send_alert_notification, push_enable
 from app.extensions import db, limiter
 from . import map_bp
 
-URGENT_CATEGORY_SLUGS = {"accion-represiva", "movimiento-tropas"}
+URGENT_CATEGORY_SLUGS = {
+    "accion-represiva",
+    "accion-represiva-del-gobierno",
+    "movimiento-tropas",
+    "movimiento-militar",
+}
 
 
 def _get_chat_nick():

@@ -321,7 +321,7 @@ def edit_report(post_id):
                 errors["repressor_name"] = "Debes indicar el nombre o apodo del represor."
             if existing_media_count < 1:
                 errors["images"] = "Debes subir al menos una imagen del represor."
-        if slug in {"accion-represiva", "movimiento-tropas"}:
+        if slug in {"accion-represiva", "accion-represiva-del-gobierno", "movimiento-tropas", "movimiento-militar"}:
             if not form_data["movement_date"]:
                 errors["movement_date"] = "Debes indicar la fecha del movimiento."
             if not form_data["movement_time"]:
@@ -364,7 +364,7 @@ def edit_report(post_id):
             else:
                 editor_label = current_user.email
 
-        if moderation_enabled and slug not in {"accion-represiva", "movimiento-tropas"}:
+        if moderation_enabled and slug not in {"accion-represiva", "accion-represiva-del-gobierno", "movimiento-tropas", "movimiento-militar"}:
             edit_req = PostEditRequest(
                 post_id=post.id,
                 editor_id=current_user.id if current_user.is_authenticated else None,

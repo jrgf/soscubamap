@@ -8,6 +8,35 @@ const CUBA_BOUNDS = {
   east: -73.0,
 };
 
+const normalizeCategoryKey = (value) =>
+  (value || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const getCategoryKey = (select) => {
+  if (!select) return "";
+  const selected = select.options[select.selectedIndex];
+  const slug = normalizeCategoryKey(selected?.dataset?.slug || "");
+  if (slug) return slug;
+  return normalizeCategoryKey(selected?.textContent || "");
+};
+
+const isUrgentCategory = (key) => {
+  if (!key) return false;
+  if (key.includes("accion-represiva")) return true;
+  if (key.includes("movimiento") && (key.includes("tropa") || key.includes("militar"))) {
+    return true;
+  }
+  return false;
+};
+
+const isResidenciaCategory = (key) => key.includes("residencia") && key.includes("represor");
+const isOtrosCategory = (key) => key === "otros" || key.includes("otros");
+
 function setupLinks() {
   const addBtn = document.getElementById("addLinkBtn");
   const list = document.getElementById("linksList");
@@ -74,11 +103,10 @@ function setupCategoryRequirements() {
   const form = document.querySelector(".form-grid");
 
   const update = () => {
-    const selected = select?.options[select.selectedIndex];
-    const slug = selected?.dataset?.slug || "";
-    const isResidencia = slug === "residencia-represor";
-    const isOtros = slug === "otros";
-    const isUrgent = slug === "movimiento-tropas" || slug === "accion-represiva";
+    const key = getCategoryKey(select);
+    const isResidencia = isResidenciaCategory(key);
+    const isOtros = isOtrosCategory(key);
+    const isUrgent = isUrgentCategory(key);
     if (residenciaFields) residenciaFields.classList.toggle("is-hidden", !isResidencia);
     if (otrosFields) otrosFields.classList.toggle("is-hidden", !isOtros);
     if (movimientoFields) movimientoFields.classList.toggle("is-hidden", !isUrgent);
@@ -94,9 +122,8 @@ function setupCategoryRequirements() {
 
   if (form) {
     form.addEventListener("submit", (e) => {
-      const selected = select?.options[select.selectedIndex];
-      const slug = selected?.dataset?.slug || "";
-      if (slug === "residencia-represor") {
+      const key = getCategoryKey(select);
+      if (isResidenciaCategory(key)) {
         const existingCount = form ? parseInt(form.dataset.existingMedia || "0", 10) : 0;
         const newCount = imageInput && imageInput.files ? imageInput.files.length : 0;
         if (existingCount + newCount < 1) {
@@ -108,7 +135,7 @@ function setupCategoryRequirements() {
           }
         }
       }
-      if (slug === "otros") {
+      if (isOtrosCategory(key)) {
         const value = (otherInput?.value || "").toLowerCase();
         if (/(represor|represores|chivato|chivata|chivatos|chivatas|informante|informantes|delator|delatores|dse|dgi)/i.test(value)) {
           e.preventDefault();
@@ -120,7 +147,7 @@ function setupCategoryRequirements() {
           }
         }
       }
-      if (slug === "movimiento-tropas" || slug === "accion-represiva") {
+      if (isUrgentCategory(key)) {
         const hasDate = movementDateInput && movementDateInput.value;
         const hasTime = movementTimeInput && movementTimeInput.value;
         if (!hasDate || !hasTime) {

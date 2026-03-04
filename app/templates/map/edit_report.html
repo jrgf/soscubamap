@@ -7,6 +7,22 @@
   {% set fd = form_data or {} %}
   {% set default_province = fd.province if use_form else (post.province or '') %}
   {% set default_municipality = fd.municipality if use_form else (post.municipality or '') %}
+  {% set ns = namespace(selected_slug='', selected_name='') %}
+  {% if use_form and fd.category_id %}
+    {% for cat in categories %}
+      {% if fd.category_id == (cat.id|string) %}
+        {% set ns.selected_slug = cat.slug %}
+        {% set ns.selected_name = cat.name %}
+      {% endif %}
+    {% endfor %}
+  {% else %}
+    {% set ns.selected_slug = post.category.slug %}
+    {% set ns.selected_name = post.category.name %}
+  {% endif %}
+  {% set selected_name = (ns.selected_name or '')|lower %}
+  {% set is_urgent = ns.selected_slug in ['accion-represiva','movimiento-tropas'] or ('accion represiva' in selected_name) or ('movimiento' in selected_name) %}
+  {% set is_residencia = ns.selected_slug == 'residencia-represor' or ('residencia' in selected_name) %}
+  {% set is_otros = ns.selected_slug == 'otros' or ('otros' in selected_name) %}
   <h1>Editar reporte</h1>
   <p class="muted">Todas las ediciones quedan registradas en el historial público.</p>
   {% if errors.get("form") %}
@@ -51,7 +67,7 @@
         <div class="field-error-msg">{{ errors.get("category_id") }}</div>
       {% endif %}
     </label>
-    <div id="residenciaFields" class="category-fields is-hidden">
+    <div id="residenciaFields" class="category-fields {% if not is_residencia %}is-hidden{% endif %}">
       <div class="category-alert">
         Para “Residencia de represor” debes indicar el nombre o apodo del represor y subir al menos una imagen.
         Esto es obligatorio para evitar abuso de la app.
@@ -64,7 +80,7 @@
         {% endif %}
       </label>
     </div>
-    <div id="otrosFields" class="category-fields is-hidden">
+    <div id="otrosFields" class="category-fields {% if not is_otros %}is-hidden{% endif %}">
       <div class="category-alert">
         Para “Otros” debes especificar el tipo del reporte.
       </div>
@@ -76,7 +92,7 @@
         {% endif %}
       </label>
     </div>
-    <div id="movimientoFields" class="category-fields is-hidden">
+    <div id="movimientoFields" class="category-fields {% if not is_urgent and not errors.get('movement_date') and not errors.get('movement_time') %}is-hidden{% endif %}">
       <div class="category-alert">
         Para “Acción represiva del gobierno” y “Movimiento de tropas” debes indicar fecha y hora del movimiento y aportar
         detalles precisos (tipo de tropas, armamento observado o motivo de la movilización).
@@ -89,6 +105,7 @@
             name="movement_date"
             id="movementDateInput"
             value="{{ fd.movement_date if use_form else (post.movement_at.strftime('%Y-%m-%d') if post.movement_at else '') }}"
+            {% if is_urgent %}required{% endif %}
             class="{{ 'field-error' if errors.get('movement_date') else '' }}"
           />
           {% if errors.get("movement_date") %}
@@ -102,6 +119,7 @@
             name="movement_time"
             id="movementTimeInput"
             value="{{ fd.movement_time if use_form else (post.movement_at.strftime('%H:%M') if post.movement_at else '') }}"
+            {% if is_urgent %}required{% endif %}
             class="{{ 'field-error' if errors.get('movement_time') else '' }}"
           />
           {% if errors.get("movement_time") %}

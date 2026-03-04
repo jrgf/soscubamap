@@ -10,12 +10,7 @@
   "icons": [
     {
       "src": "/static/img/favico.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/static/img/logo.png",
-      "sizes": "512x512",
+      "sizes": "503x474",
       "type": "image/png"
     }
   ]

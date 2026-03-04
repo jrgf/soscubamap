@@ -5,11 +5,30 @@
 
   const enabled = toggle.dataset.enabled === "1";
   const vapidKey = (toggle.dataset.vapidKey || "").trim();
+  const ua = navigator.userAgent || "";
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes("Mac") && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/.test(ua);
+  const isMobile = isIOS || isAndroid;
 
-  if (!enabled || !vapidKey || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+  const hasPushSupport = "serviceWorker" in navigator && "PushManager" in window;
+
+  if (!enabled || !vapidKey) {
     toggle.disabled = true;
     toggle.textContent = "Alertas no disponibles";
-    statusEl.textContent = "Notificaciones no soportadas o deshabilitadas.";
+    statusEl.textContent = "Notificaciones deshabilitadas en el servidor.";
+    statusEl.classList.add("is-muted");
+    return;
+  }
+
+  if (!hasPushSupport) {
+    toggle.disabled = true;
+    toggle.textContent = "Instala la PWA";
+    if (isMobile) {
+      statusEl.textContent =
+        "Para activar alertas debes instalar la PWA. iOS: Compartir → Añadir a pantalla de inicio → abre desde el icono. Android: Menú ⋮ → Instalar app / Añadir a pantalla de inicio.";
+    } else {
+      statusEl.textContent = "Tu navegador no soporta notificaciones push.";
+    }
     statusEl.classList.add("is-muted");
     return;
   }

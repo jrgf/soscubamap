@@ -13,6 +13,10 @@ const PLACEHOLDER_BY_SLUG = {
     title: "Ej: Detención masiva en parque",
     description: "Indica fecha y hora del operativo. Incluye tipo de acción, fuerzas presentes, cantidad de detenidos y referencias visibles.",
   },
+  "accion-represiva-del-gobierno": {
+    title: "Ej: Detención masiva en parque",
+    description: "Indica fecha y hora del operativo. Incluye tipo de acción, fuerzas presentes, cantidad de detenidos y referencias visibles.",
+  },
   "residencia-represor": {
     title: "Ej: Residencia de funcionario local",
     description: "Describe la ubicación exacta, referencias cercanas, horarios frecuentes y evidencias visibles.",
@@ -45,6 +49,10 @@ const PLACEHOLDER_BY_SLUG = {
     title: "Ej: Movimiento de tropas en carretera",
     description: "Indica fecha y hora del movimiento. Describe tipo de tropas, armamento observado y motivo si se conoce.",
   },
+  "movimiento-militar": {
+    title: "Ej: Movimiento de tropas en carretera",
+    description: "Indica fecha y hora del movimiento. Describe tipo de tropas, armamento observado y motivo si se conoce.",
+  },
   "base-espionaje": {
     title: "Ej: Base de espionaje",
     description: "Describe infraestructura, antenas, instalaciones cercanas y evidencia observable.",
@@ -55,15 +63,51 @@ const PLACEHOLDER_BY_SLUG = {
   },
 };
 
+const normalizeCategoryKey = (value) =>
+  (value || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const getCategoryKey = (select) => {
+  if (!select) return "";
+  const selected = select.options[select.selectedIndex];
+  const slug = normalizeCategoryKey(selected?.dataset?.slug || "");
+  if (slug) return slug;
+  return normalizeCategoryKey(selected?.textContent || "");
+};
+
+const isUrgentCategory = (key) => {
+  if (!key) return false;
+  if (key.includes("accion-represiva")) return true;
+  if (key.includes("movimiento") && (key.includes("tropa") || key.includes("militar"))) {
+    return true;
+  }
+  return false;
+};
+
+const isResidenciaCategory = (key) => key.includes("residencia") && key.includes("represor");
+const isOtrosCategory = (key) => key === "otros" || key.includes("otros");
+
+const getPlaceholderSample = (key) => {
+  if (!key) return null;
+  if (PLACEHOLDER_BY_SLUG[key]) return PLACEHOLDER_BY_SLUG[key];
+  if (key.includes("accion-represiva")) return PLACEHOLDER_BY_SLUG["accion-represiva"];
+  if (key.includes("movimiento")) return PLACEHOLDER_BY_SLUG["movimiento-tropas"];
+  return null;
+};
+
 function applyPlaceholders() {
   const select = document.getElementById("categorySelect");
   const title = document.getElementById("titleInput");
   const desc = document.getElementById("descriptionInput");
   if (!select || !title || !desc) return;
 
-  const selected = select.options[select.selectedIndex];
-  const slug = selected?.dataset?.slug;
-  const sample = PLACEHOLDER_BY_SLUG[slug];
+  const key = getCategoryKey(select);
+  const sample = getPlaceholderSample(key);
   if (sample) {
     title.placeholder = sample.title;
     desc.placeholder = sample.description;
@@ -84,11 +128,10 @@ function setupCategoryRequirements() {
   const form = document.querySelector(".form-grid");
 
   const update = () => {
-    const selected = select?.options[select.selectedIndex];
-    const slug = selected?.dataset?.slug || "";
-    const isResidencia = slug === "residencia-represor";
-    const isOtros = slug === "otros";
-    const isUrgent = slug === "movimiento-tropas" || slug === "accion-represiva";
+    const key = getCategoryKey(select);
+    const isResidencia = isResidenciaCategory(key);
+    const isOtros = isOtrosCategory(key);
+    const isUrgent = isUrgentCategory(key);
 
     if (residenciaFields) residenciaFields.classList.toggle("is-hidden", !isResidencia);
     if (otrosFields) otrosFields.classList.toggle("is-hidden", !isOtros);
@@ -105,9 +148,8 @@ function setupCategoryRequirements() {
 
   if (form) {
     form.addEventListener("submit", (e) => {
-      const selected = select?.options[select.selectedIndex];
-      const slug = selected?.dataset?.slug || "";
-      if (slug === "residencia-represor") {
+      const key = getCategoryKey(select);
+      if (isResidenciaCategory(key)) {
         const hasFiles = imageInput && imageInput.files && imageInput.files.length > 0;
         if (!hasFiles) {
           e.preventDefault();
@@ -116,7 +158,7 @@ function setupCategoryRequirements() {
           }
         }
       }
-      if (slug === "otros") {
+      if (isOtrosCategory(key)) {
         const value = (otherInput?.value || "").toLowerCase();
         if (/(represor|represores|chivato|chivata|chivatos|chivatas|informante|informantes|delator|delatores|dse|dgi)/i.test(value)) {
           e.preventDefault();
@@ -126,7 +168,7 @@ function setupCategoryRequirements() {
           }
         }
       }
-      if (slug === "movimiento-tropas" || slug === "accion-represiva") {
+      if (isUrgentCategory(key)) {
         const hasDate = movementDateInput && movementDateInput.value;
         const hasTime = movementTimeInput && movementTimeInput.value;
         if (!hasDate || !hasTime) {
@@ -397,6 +439,29 @@ function setupImageValidation() {
   });
 }
 
+function setupSubmitLabel() {
+  const form = document.querySelector(".form-grid");
+  const select = document.getElementById("categorySelect");
+  const submit = document.getElementById("submitReportBtn");
+  if (!form || !select || !submit) return;
+
+  const moderationEnabled = submit.dataset.moderationEnabled === "1";
+  const moderationLabel = submit.dataset.moderationLabel || "Enviar a moderación";
+  const publishLabel = submit.dataset.publishLabel || "Publicar reporte";
+
+  const updateLabel = () => {
+    const key = getCategoryKey(select);
+    if (moderationEnabled && !isUrgentCategory(key)) {
+      submit.textContent = moderationLabel;
+    } else {
+      submit.textContent = publishLabel;
+    }
+  };
+
+  select.addEventListener("change", updateLabel);
+  updateLabel();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const select = document.getElementById("categorySelect");
   if (select) {
@@ -404,6 +469,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   applyPlaceholders();
   setupCategoryRequirements();
+  setupSubmitLabel();
   setupLinks();
   setupProvinceMunicipality();
   setupImageValidation();
