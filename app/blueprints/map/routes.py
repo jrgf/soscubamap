@@ -4,6 +4,7 @@ import json
 import csv
 import io
 import html
+import textwrap
 from datetime import datetime
 from flask import render_template, current_app, redirect, url_for, request, flash, abort, session, make_response
 from flask_login import current_user
@@ -208,46 +209,51 @@ def export_download():
         resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp
 
-    # PDF
+    # PDF (solo texto)
     try:
-        from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.pdfgen import canvas
     except Exception:
         resp = make_response("PDF no disponible en el servidor.", 501)
         resp.headers["Content-Type"] = "text/plain; charset=utf-8"
         return resp
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=24, rightMargin=24, topMargin=24, bottomMargin=24)
-    styles = getSampleStyleSheet()
-    story = [
-        Paragraph("SOSCuba Map · Exportación de reportes", styles["Title"]),
-        Spacer(1, 12),
-        Paragraph("Fuente: reportes aprobados", styles["Normal"]),
-        Spacer(1, 12),
-    ]
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    margin = 36
+    y = height - margin
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(margin, y, "SOSCuba Map · Exportación de reportes (solo texto)")
+    y -= 18
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(margin, y, f"Generado: {datetime.utcnow().isoformat()} UTC")
+    y -= 18
 
-    data = [[label for _, label in columns]]
+    def write_line(text):
+        nonlocal y
+        if y < margin:
+            pdf.showPage()
+            y = height - margin
+            pdf.setFont("Helvetica", 9)
+        pdf.drawString(margin, y, text)
+        y -= 12
+
+    wrap_width = 110
     for row in rows:
-        data.append([str(row[key]) for key, _ in columns])
+        write_line(f"Reporte #{row['id']}")
+        for key, label in columns:
+            value = row.get(key, "")
+            if value is None:
+                value = ""
+            text = f"{label}: {value}"
+            for line in textwrap.wrap(text, width=wrap_width) or [""]:
+                write_line(line)
+        write_line("-" * 80)
+        y -= 6
 
-    table = Table(data, repeatRows=1)
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f151a")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#2a3b4a")),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 7),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ]
-        )
-    )
-    story.append(table)
-    doc.build(story)
+    pdf.showPage()
+    pdf.save()
     pdf_bytes = buffer.getvalue()
     buffer.close()
     resp = make_response(pdf_bytes)
