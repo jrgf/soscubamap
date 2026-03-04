@@ -1,4 +1,4 @@
-from flask import jsonify, request, make_response, session
+from flask import jsonify, request, make_response, session, current_app
 import json
 import secrets
 from datetime import datetime, timedelta
@@ -477,6 +477,8 @@ def upload_post_media(post_id):
 @limiter.limit("60/minute", methods=["GET"])
 @limiter.limit("6/minute; 120/day", methods=["POST"])
 def chat_messages():
+    if current_app.config.get("CHAT_DISABLED", True):
+        return jsonify({"ok": False, "error": "Chat deshabilitado."}), 403
     now = datetime.utcnow()
     cutoff_keep = now - timedelta(hours=48)
     cutoff_visible = now - timedelta(hours=24)

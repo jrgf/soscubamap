@@ -87,6 +87,7 @@ def dashboard():
         google_maps_api_key=current_app.config.get("GOOGLE_MAPS_API_KEY"),
         chat_nick=_get_chat_nick(),
         chat_sid=_get_chat_session_id(),
+        irc_nick=_get_chat_nick(),
         provinces=list_provinces(),
         municipalities_map=municipalities_map(),
     )
