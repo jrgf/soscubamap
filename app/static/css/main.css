@@ -345,7 +345,7 @@ h3 {
 
 .alert-console {
   background: rgba(20, 8, 8, 0.9);
-  border: 1px solid rgba(255, 123, 87, 0.35);
+  border: none;
   border-radius: 12px;
   padding: 14px 16px;
   margin: 18px 0 24px;
@@ -360,6 +360,35 @@ h3 {
   color: var(--danger);
 }
 
+.alert-console .console-header {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.alert-console .console-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+}
+
+.alert-console .console-actions .btn-secondary {
+  padding: 8px 12px;
+  font-size: 11px;
+}
+
+.alert-console .console-note {
+  font-size: 11px;
+  color: #ffb199;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.alert-console .console-note.is-muted {
+  color: rgba(255, 177, 153, 0.7);
+}
+
 .alert-console .console-body {
   max-height: 180px;
   overflow-y: auto;
@@ -367,7 +396,7 @@ h3 {
 }
 
 .alert-console .console-item {
-  border-color: rgba(255, 123, 87, 0.3);
+  border: none;
   background: rgba(18, 8, 8, 0.85);
 }
 
@@ -382,6 +411,17 @@ h3 {
 .alert-console .console-meta,
 .alert-console .console-time {
   color: #ffb199;
+}
+
+@media (max-width: 720px) {
+  .alert-console .console-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .alert-console .console-actions {
+    align-items: flex-start;
+  }
 }
 
 .legend {

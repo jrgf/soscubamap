@@ -26,6 +26,7 @@ from app.models.chat_message import ChatMessage
 from app.models.chat_presence import ChatPresence
 from app.models.discussion_post import DiscussionPost
 from app.models.discussion_comment import DiscussionComment
+from app.models.push_subscription import PushSubscription
 
 from app.models.post import Post
 from sqlalchemy.orm import selectinload
@@ -58,8 +59,69 @@ def _sanitize_nick(nickname: str, fallback: str) -> str:
     return value[:80]
 
 
+def _push_enabled() -> bool:
+    return bool(
+        current_app.config.get("VAPID_PUBLIC_KEY")
+        and current_app.config.get("VAPID_PRIVATE_KEY")
+    )
+
+
 @api_bp.route("/health")
 def health():
+    return jsonify({"status": "ok"})
+
+
+@api_bp.route("/push/subscribe", methods=["POST"])
+@limiter.limit("5/minute; 60/day")
+def push_subscribe():
+    if not _push_enabled():
+        return jsonify({"error": "Push deshabilitado"}), 503
+
+    payload = request.get_json(silent=True) or {}
+    endpoint = (payload.get("endpoint") or "").strip()
+    keys = payload.get("keys") or {}
+    p256dh = (keys.get("p256dh") or "").strip()
+    auth = (keys.get("auth") or "").strip()
+
+    if not endpoint or not p256dh or not auth:
+        return jsonify({"error": "Suscripción inválida"}), 400
+    if len(endpoint) > 2000 or len(p256dh) > 255 or len(auth) > 255:
+        return jsonify({"error": "Suscripción inválida"}), 400
+
+    user_agent = (request.headers.get("User-Agent") or "")[:255]
+    subscription = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if subscription:
+        subscription.p256dh = p256dh
+        subscription.auth = auth
+        subscription.active = True
+        subscription.user_agent = user_agent
+    else:
+        subscription = PushSubscription(
+            endpoint=endpoint,
+            p256dh=p256dh,
+            auth=auth,
+            user_agent=user_agent,
+            active=True,
+        )
+        db.session.add(subscription)
+
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+
+@api_bp.route("/push/unsubscribe", methods=["POST"])
+@limiter.limit("10/minute; 120/day")
+def push_unsubscribe():
+    payload = request.get_json(silent=True) or {}
+    endpoint = (payload.get("endpoint") or "").strip()
+    if not endpoint:
+        return jsonify({"error": "Suscripción inválida"}), 400
+
+    subscription = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if subscription:
+        subscription.active = False
+        subscription.updated_at = datetime.utcnow()
+        db.session.commit()
     return jsonify({"status": "ok"})
 
 

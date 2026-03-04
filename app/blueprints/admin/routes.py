@@ -17,6 +17,7 @@ from app.services.media_upload import media_json_from_post, parse_media_json, ge
 from app.services.input_safety import has_malicious_input
 from app.services.content_quality import validate_title, validate_description
 from app.services.category_rules import is_other_type_allowed
+from app.services.category_sort import sort_categories_for_forms
 from app.services.geo_lookup import lookup_location, list_provinces, municipalities_map
 from flask_login import current_user
 import json
@@ -213,7 +214,7 @@ def bulk_delete_reports():
 @role_required("administrador")
 def edit_report(post_id):
     post = Post.query.get_or_404(post_id)
-    categories = Category.query.order_by(Category.id.asc()).all()
+    categories = sort_categories_for_forms(Category.query.order_by(Category.id.asc()).all())
     links = []
     if post.links_json:
         try:
@@ -320,7 +321,7 @@ def edit_report(post_id):
                 errors["repressor_name"] = "Debes indicar el nombre o apodo del represor."
             if existing_media_count < 1:
                 errors["images"] = "Debes subir al menos una imagen del represor."
-        if slug == "movimiento-tropas":
+        if slug in {"accion-represiva", "movimiento-tropas"}:
             if not form_data["movement_date"]:
                 errors["movement_date"] = "Debes indicar la fecha del movimiento."
             if not form_data["movement_time"]:
@@ -363,7 +364,7 @@ def edit_report(post_id):
             else:
                 editor_label = current_user.email
 
-        if moderation_enabled:
+        if moderation_enabled and slug not in {"accion-represiva", "movimiento-tropas"}:
             edit_req = PostEditRequest(
                 post_id=post.id,
                 editor_id=current_user.id if current_user.is_authenticated else None,

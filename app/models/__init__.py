@@ -14,6 +14,7 @@ from .chat_presence import ChatPresence
 from .discussion_post import DiscussionPost
 from .discussion_comment import DiscussionComment
 from .discussion_tag import DiscussionTag, discussion_post_tags
+from .push_subscription import PushSubscription
 
 __all__ = [
     "User",
@@ -33,4 +34,5 @@ __all__ = [
     "DiscussionComment",
     "DiscussionTag",
     "discussion_post_tags",
+    "PushSubscription",
 ]

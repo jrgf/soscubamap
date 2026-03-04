@@ -78,14 +78,14 @@ function setupCategoryRequirements() {
     const slug = selected?.dataset?.slug || "";
     const isResidencia = slug === "residencia-represor";
     const isOtros = slug === "otros";
-    const isMovimiento = slug === "movimiento-tropas";
+    const isUrgent = slug === "movimiento-tropas" || slug === "accion-represiva";
     if (residenciaFields) residenciaFields.classList.toggle("is-hidden", !isResidencia);
     if (otrosFields) otrosFields.classList.toggle("is-hidden", !isOtros);
-    if (movimientoFields) movimientoFields.classList.toggle("is-hidden", !isMovimiento);
+    if (movimientoFields) movimientoFields.classList.toggle("is-hidden", !isUrgent);
     if (repressorInput) repressorInput.required = isResidencia;
     if (otherInput) otherInput.required = isOtros;
-    if (movementDateInput) movementDateInput.required = isMovimiento;
-    if (movementTimeInput) movementTimeInput.required = isMovimiento;
+    if (movementDateInput) movementDateInput.required = isUrgent;
+    if (movementTimeInput) movementTimeInput.required = isUrgent;
   };
 
   if (select) {
@@ -120,7 +120,7 @@ function setupCategoryRequirements() {
           }
         }
       }
-      if (slug === "movimiento-tropas") {
+      if (slug === "movimiento-tropas" || slug === "accion-represiva") {
         const hasDate = movementDateInput && movementDateInput.value;
         const hasTime = movementTimeInput && movementTimeInput.value;
         if (!hasDate || !hasTime) {

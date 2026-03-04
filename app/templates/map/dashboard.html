@@ -67,8 +67,22 @@
 
 <section class="alert-console">
   <div class="console-header">
-    <div class="console-title">Movimientos y acciones represivas</div>
-    <div class="console-status">En vivo</div>
+    <div>
+      <div class="console-title">Movimientos y acciones represivas</div>
+      <div class="console-status">En vivo</div>
+    </div>
+    <div class="console-actions">
+      <button
+        type="button"
+        id="alertPushToggle"
+        class="btn-secondary"
+        data-enabled="{{ 1 if push_alerts_enabled else 0 }}"
+        data-vapid-key="{{ vapid_public_key }}"
+      >
+        Activar alertas
+      </button>
+      <div id="alertPushStatus" class="console-note">Solo para movimiento y acción represiva.</div>
+    </div>
   </div>
   <div id="alertFeed" class="console-body">
     <div class="console-empty">Sin movimientos o acciones recientes.</div>
@@ -168,6 +182,7 @@
 
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+<script src="{{ url_for('static', filename='js/push_alerts.js') }}"></script>
 <script>
   window.CUBA_MUNICIPALITIES = {{ municipalities_map|tojson }};
 </script>

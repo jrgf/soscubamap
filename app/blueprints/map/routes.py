@@ -31,6 +31,8 @@ from app.services.recaptcha import verify_recaptcha, recaptcha_enabled
 from app.services.input_safety import has_malicious_input
 from app.services.content_quality import validate_title, validate_description
 from app.services.category_rules import is_other_type_allowed
+from app.services.category_sort import sort_categories_for_forms
+from app.services.push_notifications import send_alert_notification, push_enabled
 from app.extensions import db, limiter
 from . import map_bp
 
@@ -93,12 +95,21 @@ def dashboard():
         categories=categories,
         posts=posts,
         google_maps_api_key=current_app.config.get("GOOGLE_MAPS_API_KEY"),
+        vapid_public_key=current_app.config.get("VAPID_PUBLIC_KEY"),
+        push_alerts_enabled=push_enabled(),
         chat_nick=_get_chat_nick(),
         chat_sid=_get_chat_session_id(),
         irc_nick=_get_chat_nick(),
         provinces=list_provinces(),
         municipalities_map=municipalities_map(),
     )
+
+
+@map_bp.route("/push-sw.js")
+def push_service_worker():
+    response = current_app.send_static_file("push-sw.js")
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 def _export_columns():
@@ -283,7 +294,7 @@ def analytics():
 @map_bp.route("/nuevo", methods=["GET", "POST"])
 @limiter.limit("3/minute; 30/day", methods=["POST"])
 def new_post():
-    categories = Category.query.order_by(Category.id.asc()).all()
+    categories = sort_categories_for_forms(Category.query.order_by(Category.id.asc()).all())
     if request.method == "POST":
         form_data = {
             "title": request.form.get("title", "").strip(),
@@ -368,7 +379,7 @@ def new_post():
                 errors["repressor_name"] = "Debes indicar el nombre o apodo del represor."
             if not images:
                 errors["images"] = "Debes subir al menos una imagen del represor."
-        if slug == "movimiento-tropas":
+        if slug in URGENT_CATEGORY_SLUGS:
             if not form_data["movement_date"]:
                 errors["movement_date"] = "Debes indicar la fecha del movimiento."
             if not form_data["movement_time"]:
@@ -494,6 +505,12 @@ def new_post():
                 db.session.add(Media(post_id=post.id, file_url=url, caption=caption or None))
             db.session.commit()
 
+        if is_urgent and post.status == "approved":
+            try:
+                send_alert_notification(post)
+            except Exception:
+                current_app.logger.exception("No se pudo enviar notificación push.")
+
         payload = {
             "id": post.id,
             "status": post.status,
@@ -617,7 +634,7 @@ def edit_report_public(post_id):
             return render_template("map/edit_locked.html", message=message, post_id=post.id)
         flash(message, "error")
         return redirect(url_for("map.report_detail", post_id=post.id))
-    categories = Category.query.order_by(Category.id.asc()).all()
+    categories = sort_categories_for_forms(Category.query.order_by(Category.id.asc()).all())
     links = []
     if post.links_json:
         try:
@@ -714,7 +731,7 @@ def edit_report_public(post_id):
                 errors["repressor_name"] = "Debes indicar el nombre o apodo del represor."
             if existing_media_count + len(images) < 1:
                 errors["images"] = "Debes subir al menos una imagen del represor."
-        if slug == "movimiento-tropas":
+        if slug in URGENT_CATEGORY_SLUGS:
             if not form_data["movement_date"]:
                 errors["movement_date"] = "Debes indicar la fecha del movimiento."
             if not form_data["movement_time"]:
