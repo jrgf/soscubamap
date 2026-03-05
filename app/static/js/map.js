@@ -14,6 +14,7 @@ let mapImageModal;
 let mapImageModalImg;
 let mapImageModalCaption;
 let pendingMarkers = [];
+let mapOverlay;
 
 const CUBA_BOUNDS = {
   north: 24.2,
@@ -35,6 +36,114 @@ function safeUrl(value) {
   const url = String(value || "").trim();
   if (!/^https?:\/\//i.test(url)) return "";
   return url.replaceAll("\"", "%22").replaceAll("'", "%27");
+}
+
+function fadeInInfoWindow(info) {
+  const container = document.querySelector(".gm-style-iw-c");
+  if (!container) return;
+  const tail = container.parentElement
+    ? container.parentElement.querySelector(".gm-style-iw-t")
+    : document.querySelector(".gm-style-iw-t");
+  container.classList.add("iw-fade");
+  if (tail) {
+    tail.classList.add("iw-fade");
+  }
+  requestAnimationFrame(() => {
+    container.classList.add("iw-fade-in");
+    if (tail) {
+      tail.classList.add("iw-fade-in");
+    }
+  });
+  info.__fadeEl = container;
+  info.__fadeTail = tail;
+}
+
+function closeInfoWindowWithFade(info) {
+  if (!info) return;
+  const container = info.__fadeEl;
+  const tail = info.__fadeTail;
+  if (container) {
+    container.classList.remove("iw-fade-in");
+    if (tail) {
+      tail.classList.remove("iw-fade-in");
+    }
+    setTimeout(() => info.close(), 140);
+    return;
+  }
+  info.close();
+}
+
+function getInfoWindowOffset(position) {
+  if (!(window.google && google.maps && google.maps.Size)) {
+    return null;
+  }
+
+  const baseOffset = 12;
+  if (!position || !map || !mapOverlay || !mapOverlay.getProjection) {
+    return new google.maps.Size(0, baseOffset);
+  }
+
+  const projection = mapOverlay.getProjection();
+  if (!projection) {
+    return new google.maps.Size(0, baseOffset);
+  }
+
+  const point = projection.fromLatLngToContainerPixel(position);
+  const mapDiv = map.getDiv ? map.getDiv() : null;
+  const mapHeight = mapDiv ? mapDiv.clientHeight : 0;
+  if (!point || !mapHeight) {
+    return new google.maps.Size(0, baseOffset);
+  }
+
+  const topPadding = 140;
+  const bottomPadding = 180;
+  let offsetY = baseOffset;
+
+  if (point.y < topPadding) {
+    offsetY += topPadding - point.y;
+  } else if (point.y > mapHeight - bottomPadding) {
+    offsetY -= point.y - (mapHeight - bottomPadding);
+  }
+
+  offsetY = Math.max(Math.min(offsetY, 200), -200);
+  return new google.maps.Size(0, Math.round(offsetY));
+}
+
+function adjustInfoWindowOffset(info, position) {
+  if (!info || !position || !map || !mapOverlay || !mapOverlay.getProjection) {
+    return;
+  }
+  const projection = mapOverlay.getProjection();
+  if (!projection) return;
+  const point = projection.fromLatLngToContainerPixel(position);
+  const mapDiv = map.getDiv ? map.getDiv() : null;
+  if (!point || !mapDiv) return;
+
+  const iw = document.querySelector(".gm-style-iw");
+  if (!iw) return;
+
+  const mapHeight = mapDiv.clientHeight || 0;
+  const iwHeight = iw.getBoundingClientRect().height || 0;
+  if (!mapHeight || !iwHeight) return;
+
+  const topPadding = 16;
+  const bottomPadding = 24;
+  const currentOffset = info.get("pixelOffset");
+  let offsetY = currentOffset && typeof currentOffset.height === "number" ? currentOffset.height : 0;
+
+  const top = point.y - iwHeight + offsetY;
+  const bottom = point.y + offsetY;
+
+  if (top < topPadding) {
+    offsetY += topPadding - top;
+  } else if (bottom > mapHeight - bottomPadding) {
+    offsetY -= bottom - (mapHeight - bottomPadding);
+  }
+
+  offsetY = Math.max(Math.min(offsetY, 240), -240);
+  if (!currentOffset || currentOffset.height !== Math.round(offsetY)) {
+    info.setOptions({ pixelOffset: new google.maps.Size(0, Math.round(offsetY)) });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -131,7 +240,7 @@ function clearMarkers() {
 
 function closeActiveInfoWindow() {
   if (activeInfoWindow) {
-    activeInfoWindow.close();
+    closeInfoWindowWithFade(activeInfoWindow);
     activeInfoWindow = null;
   }
 }
@@ -266,9 +375,11 @@ function renderMarkers(posts) {
           ${post.address ? `<div style="font-size:12px;color:#666;">${safeAddress}</div>` : ""}
         </div>
       `,
+      pixelOffset: getInfoWindowOffset(position),
     });
-
     google.maps.event.addListener(info, "domready", () => {
+      fadeInInfoWindow(info);
+      adjustInfoWindowOffset(info, position);
       const thumbs = document.querySelectorAll(".info-media-thumb");
       thumbs.forEach((thumb) => {
         thumb.addEventListener("click", () => {
@@ -374,32 +485,33 @@ function renderMarkers(posts) {
           hideBtn.addEventListener("click", async () => {
             if (!confirm("¿Ocultar este reporte?")) return;
             const result = await updateStatus("hidden");
-            if (result && result.ok) {
-              allPosts = allPosts.filter((p) => p.id !== post.id);
-              applyFilters();
-              info.close();
-            }
-          });
-        }
-        if (deleteBtn) {
-          deleteBtn.addEventListener("click", async () => {
-            if (!confirm("¿Eliminar este reporte?")) return;
-            const result = await updateStatus("deleted");
-            if (result && result.ok) {
-              allPosts = allPosts.filter((p) => p.id !== post.id);
-              applyFilters();
-              info.close();
-            }
-          });
-        }
+          if (result && result.ok) {
+            allPosts = allPosts.filter((p) => p.id !== post.id);
+            applyFilters();
+            closeInfoWindowWithFade(info);
+          }
+        });
+      }
+      if (deleteBtn) {
+        deleteBtn.addEventListener("click", async () => {
+          if (!confirm("¿Eliminar este reporte?")) return;
+          const result = await updateStatus("deleted");
+          if (result && result.ok) {
+            allPosts = allPosts.filter((p) => p.id !== post.id);
+            applyFilters();
+            closeInfoWindowWithFade(info);
+          }
+        });
+      }
       }
     });
 
     marker.addListener("click", () => {
       closeActiveInfoWindow();
       if (clickInfo) {
-        clickInfo.close();
+        closeInfoWindowWithFade(clickInfo);
       }
+      info.setOptions({ pixelOffset: getInfoWindowOffset(position) });
       info.open({ anchor: marker, map });
       activeInfoWindow = info;
     });
@@ -448,8 +560,9 @@ function openPostOnMap(post) {
   if (entry && entry.info) {
     closeActiveInfoWindow();
     if (clickInfo) {
-      clickInfo.close();
+      closeInfoWindowWithFade(clickInfo);
     }
+    entry.info.setOptions({ pixelOffset: getInfoWindowOffset(position) });
     entry.info.open({ anchor: entry.marker, map });
     activeInfoWindow = entry.info;
   }
@@ -508,10 +621,15 @@ window.handleNewReport = function (payload) {
           <div style="font-size:12px;margin-top:6px;">Se mostrará cuando sea aprobado.</div>
         </div>
       `,
+      pixelOffset: getInfoWindowOffset(position),
+    });
+    google.maps.event.addListener(info, "domready", () => {
+      fadeInInfoWindow(info);
+      adjustInfoWindowOffset(info, position);
     });
     closeActiveInfoWindow();
     if (clickInfo) {
-      clickInfo.close();
+      closeInfoWindowWithFade(clickInfo);
     }
     info.open({ anchor: marker, map });
     activeInfoWindow = info;
@@ -744,6 +862,11 @@ window.initMap = async function () {
     // Styles should be managed via Map ID when present
   });
 
+  mapOverlay = new google.maps.OverlayView();
+  mapOverlay.onAdd = function () {};
+  mapOverlay.draw = function () {};
+  mapOverlay.setMap(map);
+
   const bounds = new google.maps.LatLngBounds(
     { lat: CUBA_BOUNDS.south, lng: CUBA_BOUNDS.west },
     { lat: CUBA_BOUNDS.north, lng: CUBA_BOUNDS.east }
@@ -844,7 +967,7 @@ window.initMap = async function () {
     municipalitySelect.addEventListener("change", applyFilters);
   }
 
-  clickInfo = new google.maps.InfoWindow();
+  clickInfo = new google.maps.InfoWindow({ pixelOffset: getInfoWindowOffset() });
   map.addListener("click", (event) => {
     closeActiveInfoWindow();
     const lat = event.latLng.lat().toFixed(6);
@@ -858,9 +981,12 @@ window.initMap = async function () {
       </div>
     `);
     clickInfo.setPosition(event.latLng);
+    clickInfo.setOptions({ pixelOffset: getInfoWindowOffset(event.latLng) });
     clickInfo.open(map);
 
     google.maps.event.addListenerOnce(clickInfo, "domready", () => {
+      fadeInInfoWindow(clickInfo);
+      adjustInfoWindowOffset(clickInfo, event.latLng);
       const btn = document.getElementById("createReportBtn");
       if (btn) {
         btn.addEventListener("click", () => {
