@@ -1590,6 +1590,18 @@ button[data-loading="true"]::after {
   font-size: 14px;
 }
 
+.form-grid input[type="date"],
+.form-grid input[type="time"] {
+  color: var(--text);
+  color-scheme: dark;
+}
+
+.form-grid input[type="date"]::-webkit-calendar-picker-indicator,
+.form-grid input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  filter: invert(77%) sepia(25%) saturate(420%) hue-rotate(95deg) brightness(105%) contrast(95%);
+}
+
 .category-fields {
   display: grid;
   gap: 12px;
