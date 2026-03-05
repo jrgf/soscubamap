@@ -1,6 +1,8 @@
 let drawMap;
-let drawingManager;
-let currentPolygon;
+let drawnItems;
+let currentLayer;
+let currentMarker;
+
 const CUBA_BOUNDS = {
   north: 24.2,
   south: 19.0,
@@ -36,6 +38,65 @@ const isUrgentCategory = (key) => {
 
 const isResidenciaCategory = (key) => key.includes("residencia") && key.includes("represor");
 const isOtrosCategory = (key) => key === "otros" || key.includes("otros");
+
+function cubaBounds() {
+  return L.latLngBounds(
+    [CUBA_BOUNDS.south, CUBA_BOUNDS.west],
+    [CUBA_BOUNDS.north, CUBA_BOUNDS.east]
+  );
+}
+
+function enableMiddleClickPan(leafletMap) {
+  const container = leafletMap?.getContainer?.();
+  if (!container) return;
+
+  let middleDown = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  const onMouseMove = (event) => {
+    if (!middleDown) return;
+    event.preventDefault();
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    if (!dx && !dy) return;
+    leafletMap.panBy([-dx, -dy], { animate: false, noMoveStart: true });
+    lastX = event.clientX;
+    lastY = event.clientY;
+  };
+
+  const stopMiddlePan = () => {
+    if (!middleDown) return;
+    middleDown = false;
+    container.style.cursor = "";
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+  };
+
+  const onMouseUp = (event) => {
+    if (event.button !== 1 && !middleDown) return;
+    stopMiddlePan();
+  };
+
+  container.addEventListener(
+    "mousedown",
+    (event) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      middleDown = true;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      container.style.cursor = "grabbing";
+      window.addEventListener("mousemove", onMouseMove, { passive: false });
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    { passive: false }
+  );
+
+  container.addEventListener("auxclick", (event) => {
+    if (event.button === 1) event.preventDefault();
+  });
+}
 
 function setupLinks() {
   const addBtn = document.getElementById("addLinkBtn");
@@ -76,11 +137,7 @@ function setupProvinceMunicipality() {
     }
     munSelect.innerHTML =
       `<option value="" disabled ${selected ? "" : "selected"}>Elige municipio</option>` +
-      items
-        .map(
-          (m) => `<option value="${m}" ${m === selected ? "selected" : ""}>${m}</option>`
-        )
-        .join("");
+      items.map((m) => `<option value="${m}" ${m === selected ? "selected" : ""}>${m}</option>`).join("");
   };
 
   renderMunicipalities(provSelect.value, selectedMun);
@@ -141,9 +198,10 @@ function setupCategoryRequirements() {
           e.preventDefault();
           if (otherInput) otherInput.focus();
           if (status) {
-            status.textContent = "El tipo en “Otros” no puede referirse a represores. Usa la categoría correspondiente.";
+            status.textContent =
+              "El tipo en Otros no puede referirse a represores. Usa la categoria correspondiente.";
           } else {
-            alert("El tipo en “Otros” no puede referirse a represores. Usa la categoría correspondiente.");
+            alert("El tipo en Otros no puede referirse a represores. Usa la categoria correspondiente.");
           }
         }
       }
@@ -165,133 +223,30 @@ function setupCategoryRequirements() {
   update();
 }
 
-window.initDrawMap = function () {
-  const mapEl = document.getElementById("drawMap");
-  if (!mapEl) return;
+function replaceCurrentLayer(layer) {
+  if (!drawnItems) return;
+  drawnItems.clearLayers();
+  currentLayer = layer || null;
+  if (currentLayer) drawnItems.addLayer(currentLayer);
+  syncPolygon();
+}
 
-  const lat = parseFloat(mapEl.dataset.lat);
-  const lng = parseFloat(mapEl.dataset.lng);
-  const center = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : { lat: 21.521757, lng: -77.781167 };
+function layerToGeoJson(layer) {
+  if (!layer) return null;
 
-  drawMap = new google.maps.Map(mapEl, {
-    center,
-    zoom: 14,
-    minZoom: 7,
-    restriction: { latLngBounds: CUBA_BOUNDS, strictBounds: true },
-    mapId: mapEl.dataset.mapId || undefined,
-    mapTypeId: "hybrid",
-    disableDefaultUI: true,
-  });
-
-  new google.maps.Marker({ position: center, map: drawMap });
-
-  drawingManager = new google.maps.drawing.DrawingManager({
-    drawingMode: google.maps.drawing.OverlayType.POLYGON,
-    drawingControl: true,
-    drawingControlOptions: {
-      position: google.maps.ControlPosition.TOP_LEFT,
-      drawingModes: [
-        google.maps.drawing.OverlayType.POLYGON,
-        google.maps.drawing.OverlayType.RECTANGLE,
-        google.maps.drawing.OverlayType.CIRCLE,
-      ],
-    },
-    polygonOptions: {
-      fillColor: "#6ee7b7",
-      fillOpacity: 0.25,
-      strokeColor: "#6ee7b7",
-      strokeOpacity: 0.8,
-      strokeWeight: 2,
-      editable: true,
-      draggable: false,
-    },
-    rectangleOptions: {
-      fillColor: "#6ee7b7",
-      fillOpacity: 0.25,
-      strokeColor: "#6ee7b7",
-      strokeOpacity: 0.8,
-      strokeWeight: 2,
-      editable: true,
-      draggable: false,
-    },
-    circleOptions: {
-      fillColor: "#6ee7b7",
-      fillOpacity: 0.25,
-      strokeColor: "#6ee7b7",
-      strokeOpacity: 0.8,
-      strokeWeight: 2,
-      editable: true,
-      draggable: false,
-    },
-  });
-
-  drawingManager.setMap(drawMap);
-
-  google.maps.event.addListener(drawingManager, "overlaycomplete", (event) => {
-    if (currentPolygon) {
-      currentPolygon.setMap(null);
-    }
-    currentPolygon = event.overlay;
-    drawingManager.setDrawingMode(null);
-    syncPolygon(event);
-
-    if (event.type === google.maps.drawing.OverlayType.POLYGON) {
-      google.maps.event.addListener(currentPolygon.getPath(), "set_at", () => syncPolygon(event));
-      google.maps.event.addListener(currentPolygon.getPath(), "insert_at", () => syncPolygon(event));
-    }
-    if (event.type === google.maps.drawing.OverlayType.RECTANGLE) {
-      google.maps.event.addListener(currentPolygon, "bounds_changed", () => syncPolygon(event));
-    }
-    if (event.type === google.maps.drawing.OverlayType.CIRCLE) {
-      google.maps.event.addListener(currentPolygon, "center_changed", () => syncPolygon(event));
-      google.maps.event.addListener(currentPolygon, "radius_changed", () => syncPolygon(event));
-    }
-  });
-
-  const existing = mapEl.dataset.geojson;
-  if (existing) {
-    try {
-      const geo = JSON.parse(existing);
-      if (geo.type === "Polygon" && geo.coordinates?.length) {
-        const path = geo.coordinates[0].map(([lng, lat]) => ({ lat, lng }));
-        currentPolygon = new google.maps.Polygon({
-          paths: path,
-          strokeColor: "#6ee7b7",
-          strokeOpacity: 0.8,
-          strokeWeight: 2,
-          fillColor: "#6ee7b7",
-          fillOpacity: 0.25,
-          editable: true,
-          map: drawMap,
-        });
-        syncPolygon({ type: google.maps.drawing.OverlayType.POLYGON });
-      } else if (geo.type === "Point" && geo.coordinates?.length && geo.radius_m) {
-        currentPolygon = new google.maps.Circle({
-          center: { lat: geo.coordinates[1], lng: geo.coordinates[0] },
-          radius: geo.radius_m,
-          strokeColor: "#6ee7b7",
-          strokeOpacity: 0.8,
-          strokeWeight: 2,
-          fillColor: "#6ee7b7",
-          fillOpacity: 0.25,
-          editable: true,
-          map: drawMap,
-        });
-        syncPolygon({ type: google.maps.drawing.OverlayType.CIRCLE });
-      }
-    } catch (e) {
-      // ignore
-    }
+  if (layer instanceof L.Circle) {
+    const center = layer.getLatLng();
+    return {
+      type: "Point",
+      coordinates: [center.lng, center.lat],
+      radius_m: layer.getRadius(),
+    };
   }
-};
 
-function syncPolygon(event) {
-  const input = document.getElementById("polygonGeojson");
-  if (!input || !currentPolygon) return;
-
-  let geojson = null;
-  if (event?.type === google.maps.drawing.OverlayType.POLYGON) {
-    const path = currentPolygon.getPath().getArray().map((latLng) => [latLng.lng(), latLng.lat()]);
+  if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+    const latLngs = layer.getLatLngs();
+    const ring = Array.isArray(latLngs) ? latLngs[0] || [] : [];
+    const path = ring.map((point) => [point.lng, point.lat]);
     if (path.length) {
       const [firstLng, firstLat] = path[0];
       const [lastLng, lastLat] = path[path.length - 1];
@@ -299,28 +254,168 @@ function syncPolygon(event) {
         path.push([firstLng, firstLat]);
       }
     }
-    geojson = { type: "Polygon", coordinates: [path] };
-  }
-  if (event?.type === google.maps.drawing.OverlayType.RECTANGLE) {
-    const b = currentPolygon.getBounds();
-    const ne = b.getNorthEast();
-    const sw = b.getSouthWest();
-    const path = [
-      [sw.lng(), sw.lat()],
-      [ne.lng(), sw.lat()],
-      [ne.lng(), ne.lat()],
-      [sw.lng(), ne.lat()],
-      [sw.lng(), sw.lat()],
-    ];
-    geojson = { type: "Polygon", coordinates: [path] };
-  }
-  if (event?.type === google.maps.drawing.OverlayType.CIRCLE) {
-    const c = currentPolygon.getCenter();
-    const r = currentPolygon.getRadius();
-    geojson = { type: "Point", coordinates: [c.lng(), c.lat()], radius_m: r };
+    return { type: "Polygon", coordinates: [path] };
   }
 
+  return null;
+}
+
+function syncPolygon() {
+  const input = document.getElementById("polygonGeojson");
+  if (!input) return;
+  const geojson = layerToGeoJson(currentLayer);
   input.value = geojson ? JSON.stringify(geojson) : "";
+}
+
+function addCenterMarker(center) {
+  if (!drawMap || !center) return;
+  if (currentMarker) currentMarker.remove();
+  currentMarker = L.marker([center.lat, center.lng]).addTo(drawMap);
+}
+
+function loadExistingGeometry(mapEl) {
+  const existing = mapEl.dataset.geojson || "";
+  if (!existing) return;
+
+  try {
+    const geo = JSON.parse(existing);
+    if (geo.type === "Polygon" && geo.coordinates?.length) {
+      const latLngs = geo.coordinates[0].map(([lng, lat]) => [lat, lng]);
+      const layer = L.polygon(latLngs, {
+        color: "#6ee7b7",
+        weight: 2,
+        opacity: 0.8,
+        fillColor: "#6ee7b7",
+        fillOpacity: 0.25,
+      });
+      replaceCurrentLayer(layer);
+      drawMap.fitBounds(layer.getBounds(), { padding: [16, 16] });
+    } else if (geo.type === "Point" && geo.coordinates?.length && geo.radius_m) {
+      const layer = L.circle([geo.coordinates[1], geo.coordinates[0]], {
+        radius: geo.radius_m,
+        color: "#6ee7b7",
+        weight: 2,
+        opacity: 0.8,
+        fillColor: "#6ee7b7",
+        fillOpacity: 0.25,
+      });
+      replaceCurrentLayer(layer);
+      drawMap.fitBounds(layer.getBounds(), { padding: [16, 16] });
+    }
+  } catch (err) {
+    // ignore invalid geometry
+  }
+}
+
+function setupDrawMap() {
+  const mapEl = document.getElementById("drawMap");
+  if (!mapEl || typeof L === "undefined") return;
+
+  const lat = parseFloat(mapEl.dataset.lat);
+  const lng = parseFloat(mapEl.dataset.lng);
+  const hasPreset = Number.isFinite(lat) && Number.isFinite(lng);
+  const center = hasPreset ? [lat, lng] : [21.521757, -77.781167];
+
+  drawMap = L.map(mapEl, {
+    minZoom: 7,
+    maxZoom: 19,
+    zoomControl: true,
+  }).setView(center, hasPreset ? 14 : 7);
+  enableMiddleClickPan(drawMap);
+
+  const streetsLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  });
+
+  const satelliteLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      attribution:
+        'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+      maxZoom: 19,
+    }
+  );
+
+  satelliteLayer.addTo(drawMap);
+  L.control
+    .layers(
+      {
+        Mapa: streetsLayer,
+        Satelite: satelliteLayer,
+      },
+      {},
+      { collapsed: true }
+    )
+    .addTo(drawMap);
+
+  drawMap.setMaxBounds(cubaBounds().pad(0.35));
+
+  if (hasPreset) {
+    addCenterMarker({ lat, lng });
+  }
+
+  drawnItems = new L.FeatureGroup();
+  drawMap.addLayer(drawnItems);
+
+  const drawControl = new L.Control.Draw({
+    position: "topleft",
+    draw: {
+      marker: false,
+      polyline: false,
+      circlemarker: false,
+      polygon: {
+        allowIntersection: false,
+        showArea: true,
+        shapeOptions: {
+          color: "#6ee7b7",
+          weight: 2,
+          opacity: 0.8,
+          fillColor: "#6ee7b7",
+          fillOpacity: 0.25,
+        },
+      },
+      rectangle: {
+        shapeOptions: {
+          color: "#6ee7b7",
+          weight: 2,
+          opacity: 0.8,
+          fillColor: "#6ee7b7",
+          fillOpacity: 0.25,
+        },
+      },
+      circle: {
+        shapeOptions: {
+          color: "#6ee7b7",
+          weight: 2,
+          opacity: 0.8,
+          fillColor: "#6ee7b7",
+          fillOpacity: 0.25,
+        },
+      },
+    },
+    edit: {
+      featureGroup: drawnItems,
+      remove: true,
+    },
+  });
+
+  drawMap.addControl(drawControl);
+
+  drawMap.on(L.Draw.Event.CREATED, (event) => {
+    replaceCurrentLayer(event.layer);
+  });
+
+  drawMap.on(L.Draw.Event.EDITED, () => {
+    syncPolygon();
+  });
+
+  drawMap.on(L.Draw.Event.DELETED, () => {
+    currentLayer = null;
+    syncPolygon();
+  });
+
+  loadExistingGeometry(mapEl);
 }
 
 function setupImageValidation() {
@@ -355,7 +450,7 @@ function setupImageValidation() {
           <div class="image-preview-card">
             <img src="${url}" alt="Vista previa ${idx + 1}" />
             <label class="image-caption">
-              Descripción corta (imagen ${idx + 1})
+              Descripcion corta (imagen ${idx + 1})
               <input type="text" name="image_captions[]" maxlength="255" placeholder="${file.name}" />
             </label>
           </div>
@@ -367,7 +462,7 @@ function setupImageValidation() {
   input.addEventListener("change", () => {
     if (!input.files) return;
     if (input.files.length > maxFiles) {
-      showError(`Máximo ${maxFiles} imágenes por envío.`);
+      showError(`Maximo ${maxFiles} imagenes por envio.`);
       input.value = "";
       renderPreviews();
       return;
@@ -395,11 +490,15 @@ function setupImageValidation() {
   });
 }
 
+window.initDrawMap = setupDrawMap;
+
 document.addEventListener("DOMContentLoaded", () => {
   setupLinks();
   setupCategoryRequirements();
   setupProvinceMunicipality();
   setupImageValidation();
+  setupDrawMap();
+
   const form = document.querySelector(".form-grid");
   const submit = form?.querySelector('button[type="submit"]');
   if (form && submit) {

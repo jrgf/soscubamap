@@ -1,0 +1,25 @@
+services:
+  maps:
+    image: overv/openstreetmap-tile-server:latest
+    restart: unless-stopped
+    command: run
+    ports:
+      - "8081:80"
+    environment:
+      THREADS: "4"
+    volumes:
+      - osm-db-data:/var/lib/postgresql/14/main
+      - ./data/maps:/data
+
+  maps-import:
+    image: overv/openstreetmap-tile-server:latest
+    profiles: ["maps-import"]
+    command: import
+    environment:
+      THREADS: "4"
+    volumes:
+      - osm-db-data:/var/lib/postgresql/14/main
+      - ./data/maps:/data
+
+volumes:
+  osm-db-data:

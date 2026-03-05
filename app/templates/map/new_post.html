@@ -31,8 +31,6 @@
     <div
       id="drawMap"
       class="draw-map"
-      data-api-key="{{ config.GOOGLE_MAPS_API_KEY }}"
-      data-map-id="{{ config.GOOGLE_MAPS_MAP_ID }}"
       data-lat="{{ preset_lat }}"
       data-lng="{{ preset_lng }}"
       data-zoom="{{ preset_zoom }}"
@@ -225,15 +223,22 @@
 </section>
 
 <script src="{{ url_for('static', filename='js/new_post.js') }}?v={{ config.ASSET_VERSION }}"></script>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  crossorigin=""
+/>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+  crossorigin=""
+/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js" crossorigin=""></script>
 <script>
   window.CUBA_MUNICIPALITIES = {{ municipalities_map|tojson }};
 </script>
 {% if recaptcha_site_key %}
 <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-{% endif %}
-{% if config.GOOGLE_MAPS_API_KEY %}
-<script async
-  src="https://maps.googleapis.com/maps/api/js?key={{ config.GOOGLE_MAPS_API_KEY }}&callback=initDrawMap&libraries=drawing&v=beta">
-</script>
 {% endif %}
 {% endblock %}

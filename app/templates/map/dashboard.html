@@ -94,15 +94,13 @@
   <div
     id="map"
     class="map-canvas"
-    data-api-key="{{ google_maps_api_key }}"
-    data-map-id="{{ config.GOOGLE_MAPS_MAP_ID }}"
     data-new-url="{{ url_for('map.new_post') }}"
     data-is-admin="{{ 1 if current_user.is_authenticated and current_user.has_role('administrador') else 0 }}"
     data-allow-zoom="1"
   >
     <div class="map-placeholder">
-      <div class="map-title">Google Maps</div>
-      <div class="map-subtitle">Conecta tu API key para activar el mapa.</div>
+      <div class="map-title">OpenStreetMap</div>
+      <div class="map-subtitle">Cargando mapa base.</div>
     </div>
     <div class="map-hint">Haz click en el mapa para crear un reporte</div>
   </div>
@@ -184,12 +182,13 @@
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 <script src="{{ url_for('static', filename='js/push_alerts.js') }}"></script>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  crossorigin=""
+/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
   window.CUBA_MUNICIPALITIES = {{ municipalities_map|tojson }};
 </script>
-{% if google_maps_api_key %}
-<script async
-  src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initMap&libraries=marker,places&v=beta">
-</script>
-{% endif %}
 {% endblock %}

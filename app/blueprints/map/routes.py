@@ -1,42 +1,59 @@
-from decimal import Decimal
-import secrets
-import json
 import csv
-import io
 import html
+import io
+import json
+import secrets
 import textwrap
 from datetime import datetime
-from flask import render_template, current_app, redirect, url_for, request, flash, abort, session, make_response
+from decimal import Decimal
+
+from flask import (
+    abort,
+    current_app,
+    flash,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_login import current_user
 from sqlalchemy.orm import selectinload
 
+from app.extensions import db, limiter
 from app.models.category import Category
 from app.models.donation_log import DonationLog
+from app.models.location_report import LocationReport
+from app.models.media import Media
 from app.models.post import Post
-from app.models.user import User
+from app.models.post_edit_request import PostEditRequest
+from app.models.post_revision import PostRevision
 from app.models.role import Role
 from app.models.site_setting import SiteSetting
-from app.models.location_report import LocationReport
-from app.models.post_revision import PostRevision
-from app.models.post_edit_request import PostEditRequest
-from app.models.media import Media
+from app.models.user import User
 from app.models.vote_record import VoteRecord
-from app.services.geo_lookup import lookup_location, list_provinces, list_municipalities, municipalities_map
-from app.services.media_upload import (
-    media_json_from_post,
-    get_media_payload,
-    parse_media_json,
-    validate_files,
-    upload_files,
-)
-from app.services.recaptcha import verify_recaptcha, recaptcha_enabled
-from app.services.input_safety import has_malicious_input
-from app.services.content_quality import validate_title, validate_description
 from app.services.category_rules import is_other_type_allowed
 from app.services.category_sort import sort_categories_for_forms
-from app.services.push_notifications import send_alert_notification, push_enabled
+from app.services.content_quality import validate_description, validate_title
+from app.services.geo_lookup import (
+    list_municipalities,
+    list_provinces,
+    lookup_location,
+    municipalities_map,
+)
+from app.services.input_safety import has_malicious_input
+from app.services.media_upload import (
+    get_media_payload,
+    media_json_from_post,
+    parse_media_json,
+    upload_files,
+    validate_files,
+)
+from app.services.push_notifications import push_enabled, send_alert_notification
+from app.services.recaptcha import recaptcha_enabled, verify_recaptcha
 from app.services.vote_identity import get_voter_hash
-from app.extensions import db, limiter
+
 from . import map_bp
 
 URGENT_CATEGORY_SLUGS = {
@@ -48,7 +65,9 @@ URGENT_CATEGORY_SLUGS = {
 
 
 def _get_chat_nick():
-    allow_admin = current_user.is_authenticated and current_user.has_role("administrador")
+    allow_admin = current_user.is_authenticated and current_user.has_role(
+        "administrador"
+    )
     if current_user.is_authenticated and current_user.anon_code:
         return f"Anon-{current_user.anon_code}"
     nick = session.get("chat_nick")
@@ -73,7 +92,9 @@ def _get_chat_session_id():
 def _get_verified_post_ids(post_ids):
     if not post_ids:
         return set()
-    voter_hash = get_voter_hash(current_user, request, current_app.config.get("SECRET_KEY", ""))
+    voter_hash = get_voter_hash(
+        current_user, request, current_app.config.get("SECRET_KEY", "")
+    )
     if not voter_hash:
         return set()
     rows = (
@@ -116,7 +137,6 @@ def dashboard():
         "map/dashboard.html",
         categories=categories,
         posts=posts,
-        google_maps_api_key=current_app.config.get("GOOGLE_MAPS_API_KEY"),
         vapid_public_key=current_app.config.get("VAPID_PUBLIC_KEY"),
         push_alerts_enabled=push_enabled(),
         chat_nick=_get_chat_nick(),
@@ -219,9 +239,7 @@ def export_download():
         return resp
 
     if fmt == "xls":
-        header_cells = "".join(
-            f"<th>{html.escape(label)}</th>" for _, label in columns
-        )
+        header_cells = "".join(f"<th>{html.escape(label)}</th>" for _, label in columns)
         body_rows = []
         for row in rows:
             cells = "".join(
@@ -230,13 +248,13 @@ def export_download():
             )
             body_rows.append(f"<tr>{cells}</tr>")
         table_html = (
-            "<table border=\"1\">"
+            '<table border="1">'
             f"<thead><tr>{header_cells}</tr></thead>"
             f"<tbody>{''.join(body_rows)}</tbody>"
             "</table>"
         )
         html_doc = (
-            "<!doctype html><html><head><meta charset=\"utf-8\"></head>"
+            '<!doctype html><html><head><meta charset="utf-8"></head>'
             f"<body>{table_html}</body></html>"
         )
         resp = make_response(html_doc)
@@ -316,7 +334,9 @@ def analytics():
 @map_bp.route("/nuevo", methods=["GET", "POST"])
 @limiter.limit("3/minute; 30/day", methods=["POST"])
 def new_post():
-    categories = sort_categories_for_forms(Category.query.order_by(Category.id.asc()).all())
+    categories = sort_categories_for_forms(
+        Category.query.order_by(Category.id.asc()).all()
+    )
     if request.method == "POST":
         form_data = {
             "title": request.form.get("title", "").strip(),
@@ -346,7 +366,9 @@ def new_post():
         if recaptcha_enabled():
             token = request.form.get("g-recaptcha-response", "")
             if not verify_recaptcha(token, request.remote_addr):
-                errors["recaptcha"] = "Verificación reCAPTCHA falló. Intenta nuevamente."
+                errors["recaptcha"] = (
+                    "Verificación reCAPTCHA falló. Intenta nuevamente."
+                )
 
         if has_malicious_input(
             [
@@ -362,7 +384,9 @@ def new_post():
             ]
             + links
         ):
-            errors["form"] = "Se detectó contenido sospechoso. Revisa y vuelve a intentar."
+            errors["form"] = (
+                "Se detectó contenido sospechoso. Revisa y vuelve a intentar."
+            )
 
         if not form_data["title"]:
             errors["title"] = "El título es obligatorio."
@@ -381,7 +405,9 @@ def new_post():
                 errors["title"] = msg_title
         if form_data["description"] and "description" not in errors:
             if len(form_data["description"]) < 50:
-                errors["description"] = "La descripción debe tener al menos 50 caracteres."
+                errors["description"] = (
+                    "La descripción debe tener al menos 50 caracteres."
+                )
             else:
                 ok_desc, msg_desc = validate_description(form_data["description"])
                 if not ok_desc:
@@ -398,7 +424,9 @@ def new_post():
         movement_at = None
         if slug == "residencia-represor":
             if not form_data["repressor_name"]:
-                errors["repressor_name"] = "Debes indicar el nombre o apodo del represor."
+                errors["repressor_name"] = (
+                    "Debes indicar el nombre o apodo del represor."
+                )
             if not images:
                 errors["images"] = "Debes subir al menos una imagen del represor."
         if slug in URGENT_CATEGORY_SLUGS:
@@ -415,7 +443,9 @@ def new_post():
                     errors["movement_date"] = "Fecha u hora inválida."
         if slug == "otros":
             if not form_data["other_type"]:
-                errors["other_type"] = "Debes especificar el tipo en la categoría Otros."
+                errors["other_type"] = (
+                    "Debes especificar el tipo en la categoría Otros."
+                )
             elif not is_other_type_allowed(form_data["other_type"]):
                 errors["other_type"] = (
                     "El tipo en “Otros” no puede referirse a represores. Usa la categoría correspondiente."
@@ -448,7 +478,9 @@ def new_post():
             errors["municipality"] = "Municipio obligatorio."
 
         if errors:
-            moderation_setting = SiteSetting.query.filter_by(key="moderation_enabled").first()
+            moderation_setting = SiteSetting.query.filter_by(
+                key="moderation_enabled"
+            ).first()
             moderation_enabled = True
             if moderation_setting:
                 moderation_enabled = moderation_setting.value == "true"
@@ -474,7 +506,9 @@ def new_post():
             flash("Latitud/longitud inválidas.", "error")
             return redirect(url_for("map.new_post"))
 
-        province, municipality = _resolve_geo_location(lat, lng, form_data["province"], form_data["municipality"])
+        province, municipality = _resolve_geo_location(
+            lat, lng, form_data["province"], form_data["municipality"]
+        )
         if not province or not municipality:
             flash("Provincia y municipio son obligatorios.", "error")
             return redirect(url_for("map.new_post"))
@@ -494,7 +528,9 @@ def new_post():
             db.session.flush()
             author_id = anon_user.id
 
-        moderation_setting = SiteSetting.query.filter_by(key="moderation_enabled").first()
+        moderation_setting = SiteSetting.query.filter_by(
+            key="moderation_enabled"
+        ).first()
         moderation_enabled = True
         if moderation_setting:
             moderation_enabled = moderation_setting.value == "true"
@@ -524,7 +560,9 @@ def new_post():
             captions = _clean_captions(image_captions, len(media_urls))
             for idx, url in enumerate(media_urls):
                 caption = captions[idx] if idx < len(captions) else ""
-                db.session.add(Media(post_id=post.id, file_url=url, caption=caption or None))
+                db.session.add(
+                    Media(post_id=post.id, file_url=url, caption=caption or None)
+                )
             db.session.commit()
 
         if is_urgent and post.status == "approved":
@@ -566,7 +604,9 @@ def new_post():
         try:
             lat = Decimal(preset_lat)
             lng = Decimal(preset_lng)
-            preset_province, preset_municipality = _resolve_geo_location(lat, lng, "", "")
+            preset_province, preset_municipality = _resolve_geo_location(
+                lat, lng, "", ""
+            )
         except Exception:
             preset_province = ""
             preset_municipality = ""
@@ -612,7 +652,9 @@ def report_location(post_id):
     if request.method == "POST":
         message = request.form.get("message", "").strip()
         if has_malicious_input([message]):
-            flash("Se detectó contenido sospechoso. Revisa y vuelve a intentar.", "error")
+            flash(
+                "Se detectó contenido sospechoso. Revisa y vuelve a intentar.", "error"
+            )
         elif not message:
             flash("Describe por qué la ubicación es incorrecta.", "error")
         else:
@@ -654,10 +696,14 @@ def edit_report_public(post_id):
             "Aun puedes comentar notas y reportar ubicacion si detectas un dato erroneo."
         )
         if request.args.get("modal") == "1":
-            return render_template("map/edit_locked.html", message=message, post_id=post.id)
+            return render_template(
+                "map/edit_locked.html", message=message, post_id=post.id
+            )
         flash(message, "error")
         return redirect(url_for("map.report_detail", post_id=post.id))
-    categories = sort_categories_for_forms(Category.query.order_by(Category.id.asc()).all())
+    categories = sort_categories_for_forms(
+        Category.query.order_by(Category.id.asc()).all()
+    )
     links = []
     if post.links_json:
         try:
@@ -695,7 +741,9 @@ def edit_report_public(post_id):
         if recaptcha_enabled():
             token = request.form.get("g-recaptcha-response", "")
             if not verify_recaptcha(token, request.remote_addr):
-                errors["recaptcha"] = "Verificación reCAPTCHA falló. Intenta nuevamente."
+                errors["recaptcha"] = (
+                    "Verificación reCAPTCHA falló. Intenta nuevamente."
+                )
 
         if has_malicious_input(
             [
@@ -712,7 +760,9 @@ def edit_report_public(post_id):
             ]
             + links_list
         ):
-            errors["form"] = "Se detectó contenido sospechoso. Revisa y vuelve a intentar."
+            errors["form"] = (
+                "Se detectó contenido sospechoso. Revisa y vuelve a intentar."
+            )
 
         if not form_data["title"]:
             errors["title"] = "El título es obligatorio."
@@ -733,7 +783,9 @@ def edit_report_public(post_id):
                 errors["title"] = msg_title
         if form_data["description"] and "description" not in errors:
             if len(form_data["description"]) < 50:
-                errors["description"] = "La descripción debe tener al menos 50 caracteres."
+                errors["description"] = (
+                    "La descripción debe tener al menos 50 caracteres."
+                )
             else:
                 ok_desc, msg_desc = validate_description(form_data["description"])
                 if not ok_desc:
@@ -751,7 +803,9 @@ def edit_report_public(post_id):
         movement_at = None
         if slug == "residencia-represor":
             if not form_data["repressor_name"]:
-                errors["repressor_name"] = "Debes indicar el nombre o apodo del represor."
+                errors["repressor_name"] = (
+                    "Debes indicar el nombre o apodo del represor."
+                )
             if existing_media_count + len(images) < 1:
                 errors["images"] = "Debes subir al menos una imagen del represor."
         if slug in URGENT_CATEGORY_SLUGS:
@@ -768,7 +822,9 @@ def edit_report_public(post_id):
                     errors["movement_date"] = "Fecha u hora inválida."
         if slug == "otros":
             if not form_data["other_type"]:
-                errors["other_type"] = "Debes especificar el tipo en la categoría Otros."
+                errors["other_type"] = (
+                    "Debes especificar el tipo en la categoría Otros."
+                )
             elif not is_other_type_allowed(form_data["other_type"]):
                 errors["other_type"] = (
                     "El tipo en “Otros” no puede referirse a represores. Usa la categoría correspondiente."
@@ -801,7 +857,9 @@ def edit_report_public(post_id):
             errors["municipality"] = "Municipio obligatorio."
 
         if errors:
-            moderation_setting = SiteSetting.query.filter_by(key="moderation_enabled").first()
+            moderation_setting = SiteSetting.query.filter_by(
+                key="moderation_enabled"
+            ).first()
             moderation_enabled = True
             if moderation_setting:
                 moderation_enabled = moderation_setting.value == "true"
@@ -827,18 +885,24 @@ def edit_report_public(post_id):
             flash("Latitud/longitud inválidas.", "error")
             return redirect(url_for("map.edit_report_public", post_id=post.id))
 
-        province, municipality = _resolve_geo_location(lat, lng, form_data["province"], form_data["municipality"])
+        province, municipality = _resolve_geo_location(
+            lat, lng, form_data["province"], form_data["municipality"]
+        )
         if not province or not municipality:
             flash("Provincia y municipio son obligatorios.", "error")
             return redirect(url_for("map.edit_report_public", post_id=post.id))
 
-        moderation_setting = SiteSetting.query.filter_by(key="moderation_enabled").first()
+        moderation_setting = SiteSetting.query.filter_by(
+            key="moderation_enabled"
+        ).first()
         moderation_enabled = True
         if moderation_setting:
             moderation_enabled = moderation_setting.value == "true"
 
         editor = _get_or_create_anon_editor()
-        editor_label = f"Anon-{editor.anon_code}" if editor and editor.anon_code else "Anon"
+        editor_label = (
+            f"Anon-{editor.anon_code}" if editor and editor.anon_code else "Anon"
+        )
         media_urls = []
         media_items = []
         if images:
@@ -874,7 +938,9 @@ def edit_report_public(post_id):
                 category_id=int(form_data["category_id"]),
                 polygon_geojson=form_data["polygon_geojson"] or None,
                 links_json=json.dumps(links_list) if links_list else None,
-                media_json=json.dumps(combined_media) if combined_media is not None else None,
+                media_json=(
+                    json.dumps(combined_media) if combined_media is not None else None
+                ),
             )
             db.session.add(edit_req)
             db.session.commit()
@@ -962,9 +1028,8 @@ def edit_report_public(post_id):
 def report_detail(post_id):
     post = Post.query.get_or_404(post_id)
     if post.status != "approved":
-        allowed = (
-            current_user.is_authenticated
-            and (current_user.has_role("moderador") or current_user.has_role("administrador"))
+        allowed = current_user.is_authenticated and (
+            current_user.has_role("moderador") or current_user.has_role("administrador")
         )
         if not allowed:
             abort(404)
@@ -976,7 +1041,11 @@ def report_detail(post_id):
         except Exception:
             links = []
 
-    anon_label = f"Anon-{post.author.anon_code}" if post.author and post.author.anon_code else "Anon"
+    anon_label = (
+        f"Anon-{post.author.anon_code}"
+        if post.author and post.author.anon_code
+        else "Anon"
+    )
     moderation_setting = SiteSetting.query.filter_by(key="moderation_enabled").first()
     moderation_enabled = True
     if moderation_setting:
@@ -998,7 +1067,11 @@ def report_detail(post_id):
 @map_bp.route("/reporte/<int:post_id>/historial")
 def post_history(post_id):
     post = Post.query.get_or_404(post_id)
-    revisions = PostRevision.query.filter_by(post_id=post.id).order_by(PostRevision.created_at.desc()).all()
+    revisions = (
+        PostRevision.query.filter_by(post_id=post.id)
+        .order_by(PostRevision.created_at.desc())
+        .all()
+    )
     rejected_edits = (
         PostEditRequest.query.filter_by(post_id=post.id, status="rejected")
         .order_by(PostEditRequest.created_at.desc())

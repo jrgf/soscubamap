@@ -3,44 +3,97 @@
 Dashboard colaborativo para documentar y visualizar lugares y acciones represivas en Cuba.
 
 ## Stack
+
 - Python Flask
 - PostgreSQL
+- Leaflet + OpenStreetMap
 
-## Configuración rápida
-1. Crear entorno virtual e instalar dependencias
-2. Copiar variables de entorno
-3. Crear base de datos y ejecutar migraciones
-4. Sembrar roles y categorías
-5. Configurar admin por env
-6. Ejecutar app
+## Instalacion principal (baremetal)
 
-## Comandos sugeridos
+Esta es la opcion recomendada para desarrollo y control directo del entorno.
+
+1. Crear entorno virtual e instalar dependencias.
+
 ```bash
 python -m venv .venv
+```
+
+Linux/macOS:
+
+```bash
 source .venv/bin/activate
+```
+
+Windows (PowerShell):
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+```bash
 pip install -r requirements.txt
 cp .env.example .env
+```
 
-createdb soscubamap
+1. Configurar base de datos y migraciones.
 
-flask --app run.py db init
-flask --app run.py db migrate -m "init"
+```bash
 flask --app run.py db upgrade
+```
 
+1. Sembrar datos base.
+
+```bash
 python -m scripts.seed_roles
 python -m scripts.seed_categories
+```
 
-echo "ADMIN_EMAIL=admin@soscuba.local" >> .env
-echo "ADMIN_PASSWORD=tu_password_seguro" >> .env
+1. Configurar admin (opcional, recomendado).
 
+```bash
+ADMIN_EMAIL=admin@soscuba.local
+ADMIN_PASSWORD=tu_password_seguro
+```
+
+1. Ejecutar la app.
+
+```bash
 flask --app run.py run
 ```
 
+## Opcion alternativa: Docker Compose
+
+Si prefieres entorno containerizado:
+
+```bash
+docker compose up --build -d
+```
+
+Logs:
+
+```bash
+docker compose logs -f web
+```
+
+Parar:
+
+```bash
+docker compose down
+```
+
+## Self-hosted maps (opcional)
+
+Existe soporte para mapas self-hosted con un compose adicional.
+Para configuracion completa e import de datos OSM, ver:
+
+- `README.maps-selfhosted.es.md`
+
 ## Roles
+
 - colaborador: cuenta estandar
 - moderador: revisa reportes
 - administrador: gestiona usuarios y ajustes
 
 ## Nota
-Los reportes se muestran como anónimos por defecto y pasan por moderación.
-Si `ADMIN_EMAIL` y `ADMIN_PASSWORD` están en `.env`, al hacer login con esas credenciales se crea el usuario admin automáticamente.
+
+Los reportes se muestran como anonimos por defecto y pueden pasar por moderacion segun la configuracion.
