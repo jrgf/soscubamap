@@ -755,29 +755,54 @@ async function refreshAlerts() {
   }
 }
 
-async function searchInCuba(query) {
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=cu&q=${encodeURIComponent(
-    query
+function parseNominatimResult(item, fallbackLabel) {
+  if (!item) return null;
+  const lat = Number(item.lat);
+  const lng = Number(item.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (!isWithinCubaBounds({ lat, lng })) return null;
+
+  return {
+    lat,
+    lng,
+    label: item.display_name || fallbackLabel || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+  };
+}
+
+async function searchSuggestionsInCuba(query, limit = 5) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+
+  const size = Math.min(Math.max(parseInt(limit, 10) || 5, 1), 8);
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&accept-language=es&limit=${size}&countrycodes=cu&q=${encodeURIComponent(
+    q
   )}`;
   const res = await fetch(url, {
     headers: {
       Accept: "application/json",
     },
   });
-  if (!res.ok) return null;
+  if (!res.ok) return [];
   const data = await res.json();
-  if (!Array.isArray(data) || !data.length) return null;
+  if (!Array.isArray(data) || !data.length) return [];
 
-  const result = data.find((item) =>
-    isWithinCubaBounds({ lat: Number(item.lat), lng: Number(item.lon) })
-  );
-  if (!result) return null;
+  const seen = new Set();
+  const results = [];
+  data.forEach((item) => {
+    const parsed = parseNominatimResult(item, q);
+    if (!parsed) return;
+    const key = `${parsed.lat.toFixed(6)},${parsed.lng.toFixed(6)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push(parsed);
+  });
 
-  return {
-    lat: Number(result.lat),
-    lng: Number(result.lon),
-    label: result.display_name || query,
-  };
+  return results;
+}
+
+async function searchInCuba(query) {
+  const matches = await searchSuggestionsInCuba(query, 5);
+  return matches[0] || null;
 }
 
 function focusSearchResult(result) {
@@ -791,6 +816,165 @@ function focusSearchResult(result) {
   searchMarker = L.marker([result.lat, result.lng], {
     title: result.label || "Busqueda",
   }).addTo(map);
+}
+
+function setupMapSearchAutocomplete(searchInput) {
+  if (!searchInput) return;
+  const searchBar = searchInput.closest(".map-search-bar");
+  if (!searchBar) return;
+
+  let suggestions = [];
+  let activeIndex = -1;
+  let debounceTimer = null;
+  let requestToken = 0;
+
+  let dropdown = searchBar.querySelector(".map-search-suggestions");
+  if (!dropdown) {
+    dropdown = document.createElement("div");
+    dropdown.className = "map-search-suggestions";
+    dropdown.id = "mapSearchSuggestions";
+    dropdown.setAttribute("role", "listbox");
+    dropdown.hidden = true;
+    searchBar.appendChild(dropdown);
+  }
+
+  searchInput.setAttribute("autocomplete", "off");
+  searchInput.setAttribute("role", "combobox");
+  searchInput.setAttribute("aria-autocomplete", "list");
+  searchInput.setAttribute("aria-controls", dropdown.id);
+  searchInput.setAttribute("aria-expanded", "false");
+
+  const closeDropdown = () => {
+    dropdown.hidden = true;
+    dropdown.innerHTML = "";
+    activeIndex = -1;
+    searchInput.setAttribute("aria-expanded", "false");
+  };
+
+  const refreshActiveItem = () => {
+    const items = dropdown.querySelectorAll(".map-search-suggestion");
+    items.forEach((item, idx) => {
+      const isActive = idx === activeIndex;
+      item.classList.toggle("is-active", isActive);
+      item.setAttribute("aria-selected", isActive ? "true" : "false");
+      if (isActive) {
+        item.scrollIntoView({ block: "nearest" });
+      }
+    });
+  };
+
+  const selectSuggestion = (entry) => {
+    if (!entry) return;
+    searchInput.value = entry.label || searchInput.value;
+    closeDropdown();
+    focusSearchResult(entry);
+  };
+
+  const renderDropdown = () => {
+    if (!suggestions.length) {
+      closeDropdown();
+      return;
+    }
+    dropdown.innerHTML = suggestions
+      .map((entry, idx) => {
+        const label = escapeHtml(entry.label || "");
+        const activeClass = idx === activeIndex ? " is-active" : "";
+        const selected = idx === activeIndex ? "true" : "false";
+        return `<button type="button" class="map-search-suggestion${activeClass}" data-idx="${idx}" role="option" aria-selected="${selected}">${label}</button>`;
+      })
+      .join("");
+    dropdown.hidden = false;
+    searchInput.setAttribute("aria-expanded", "true");
+
+    dropdown.querySelectorAll(".map-search-suggestion").forEach((item) => {
+      item.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+      });
+      item.addEventListener("click", () => {
+        const idx = parseInt(item.getAttribute("data-idx"), 10);
+        if (Number.isNaN(idx)) return;
+        selectSuggestion(suggestions[idx]);
+      });
+    });
+  };
+
+  const runSearch = async () => {
+    const query = searchInput.value.trim();
+    if (query.length < 3) {
+      suggestions = [];
+      closeDropdown();
+      return;
+    }
+
+    const token = ++requestToken;
+    try {
+      const found = await searchSuggestionsInCuba(query, 6);
+      if (token !== requestToken) return;
+      suggestions = found;
+      activeIndex = suggestions.length ? 0 : -1;
+      renderDropdown();
+    } catch (err) {
+      if (token !== requestToken) return;
+      suggestions = [];
+      closeDropdown();
+    }
+  };
+
+  searchInput.addEventListener("input", () => {
+    if (debounceTimer) window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(runSearch, 240);
+  });
+
+  searchInput.addEventListener("focus", () => {
+    if (suggestions.length) {
+      dropdown.hidden = false;
+      searchInput.setAttribute("aria-expanded", "true");
+      refreshActiveItem();
+    }
+  });
+
+  searchInput.addEventListener("keydown", async (event) => {
+    if (event.key === "ArrowDown") {
+      if (!suggestions.length) return;
+      event.preventDefault();
+      activeIndex = (activeIndex + 1) % suggestions.length;
+      refreshActiveItem();
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      if (!suggestions.length) return;
+      event.preventDefault();
+      activeIndex = activeIndex <= 0 ? suggestions.length - 1 : activeIndex - 1;
+      refreshActiveItem();
+      return;
+    }
+    if (event.key === "Escape") {
+      if (dropdown.hidden) return;
+      event.preventDefault();
+      suggestions = [];
+      closeDropdown();
+      return;
+    }
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    if (suggestions.length && activeIndex >= 0) {
+      selectSuggestion(suggestions[activeIndex]);
+      return;
+    }
+
+    const query = searchInput.value.trim();
+    if (!query) return;
+    const found = await searchInCuba(query);
+    if (!found) return;
+    selectSuggestion(found);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (searchBar.contains(event.target)) return;
+    suggestions = [];
+    closeDropdown();
+  });
 }
 
 async function initMap() {
@@ -853,15 +1037,7 @@ async function initMap() {
 
   const searchInput = document.getElementById("mapSearch");
   if (searchInput) {
-    searchInput.addEventListener("keydown", async (e) => {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      const query = searchInput.value.trim();
-      if (!query) return;
-      const found = await searchInCuba(query);
-      if (!found) return;
-      focusSearchResult(found);
-    });
+    setupMapSearchAutocomplete(searchInput);
   }
 
   allPosts = await loadPosts();

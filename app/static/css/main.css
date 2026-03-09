@@ -296,6 +296,7 @@ h3 {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: grid;
+  position: relative;
 }
 
 .map-search-bar input {
@@ -311,6 +312,43 @@ h3 {
 .map-search-bar input::placeholder {
   color: rgba(214, 251, 231, 0.8);
   font-weight: 600;
+}
+
+.map-search-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  border: 1px solid rgba(110, 231, 183, 0.35);
+  border-radius: 10px;
+  background: rgba(9, 14, 18, 0.98);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.45);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 30;
+  display: grid;
+}
+
+.map-search-suggestion {
+  text-align: left;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(110, 231, 183, 0.14);
+}
+
+.map-search-suggestion:last-child {
+  border-bottom: none;
+}
+
+.map-search-suggestion:hover,
+.map-search-suggestion.is-active {
+  background: rgba(110, 231, 183, 0.15);
+  color: #e8fff3;
 }
 
 .map-canvas .gm-style .gm-style-iw,
