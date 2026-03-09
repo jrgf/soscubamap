@@ -1,20 +1,16 @@
 let map;
 let markers = [];
 let markerIndex = new Map();
-let clickInfo;
-let activeInfoWindow;
+let shapeLayers = [];
+let activePopup;
 let recentTimer;
-let searchBox;
-let autocomplete;
 let searchMarker;
-let geocoder;
 let isAdmin = false;
 let allPosts = [];
 let mapImageModal;
 let mapImageModalImg;
 let mapImageModalCaption;
 let pendingMarkers = [];
-let mapOverlay;
 
 const CUBA_BOUNDS = {
   north: 24.2,
@@ -23,135 +19,86 @@ const CUBA_BOUNDS = {
   east: -73.0,
 };
 
+function cubaLatLngBounds() {
+  return L.latLngBounds(
+    [CUBA_BOUNDS.south, CUBA_BOUNDS.west],
+    [CUBA_BOUNDS.north, CUBA_BOUNDS.east]
+  );
+}
+
+function enableMiddleClickPan(leafletMap) {
+  const container = leafletMap?.getContainer?.();
+  if (!container) return;
+
+  let middleDown = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  const onMouseMove = (event) => {
+    if (!middleDown) return;
+    event.preventDefault();
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    if (!dx && !dy) return;
+    leafletMap.panBy([-dx, -dy], { animate: false, noMoveStart: true });
+    lastX = event.clientX;
+    lastY = event.clientY;
+  };
+
+  const stopMiddlePan = () => {
+    if (!middleDown) return;
+    middleDown = false;
+    container.style.cursor = "";
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+  };
+
+  const onMouseUp = (event) => {
+    if (event.button !== 1 && !middleDown) return;
+    stopMiddlePan();
+  };
+
+  container.addEventListener(
+    "mousedown",
+    (event) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      middleDown = true;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      container.style.cursor = "grabbing";
+      window.addEventListener("mousemove", onMouseMove, { passive: false });
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    { passive: false }
+  );
+
+  container.addEventListener("auxclick", (event) => {
+    if (event.button === 1) event.preventDefault();
+  });
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;")
+    .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
 
 function safeUrl(value) {
   const url = String(value || "").trim();
   if (!/^https?:\/\//i.test(url)) return "";
-  return url.replaceAll("\"", "%22").replaceAll("'", "%27");
+  return url.replaceAll('"', "%22").replaceAll("'", "%27");
 }
 
 function isWithinCubaBounds(location) {
   if (!location) return false;
-  const lat = typeof location.lat === "function" ? location.lat() : location.lat;
-  const lng = typeof location.lng === "function" ? location.lng() : location.lng;
+  const lat = Number(location.lat);
+  const lng = Number(location.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
   return lat <= CUBA_BOUNDS.north && lat >= CUBA_BOUNDS.south && lng >= CUBA_BOUNDS.west && lng <= CUBA_BOUNDS.east;
-}
-
-function fadeInInfoWindow(info) {
-  const container = document.querySelector(".gm-style-iw-c");
-  if (!container) return;
-  const tail = container.parentElement
-    ? container.parentElement.querySelector(".gm-style-iw-t")
-    : document.querySelector(".gm-style-iw-t");
-  container.classList.add("iw-fade");
-  if (tail) {
-    tail.classList.add("iw-fade");
-  }
-  requestAnimationFrame(() => {
-    container.classList.add("iw-fade-in");
-    if (tail) {
-      tail.classList.add("iw-fade-in");
-    }
-  });
-  info.__fadeEl = container;
-  info.__fadeTail = tail;
-}
-
-function closeInfoWindowWithFade(info) {
-  if (!info) return;
-  const container = info.__fadeEl;
-  const tail = info.__fadeTail;
-  if (container) {
-    container.classList.remove("iw-fade-in");
-    if (tail) {
-      tail.classList.remove("iw-fade-in");
-    }
-    setTimeout(() => info.close(), 140);
-    return;
-  }
-  info.close();
-}
-
-function getInfoWindowOffset(position) {
-  if (!(window.google && google.maps && google.maps.Size)) {
-    return null;
-  }
-
-  const baseOffset = 12;
-  if (!position || !map || !mapOverlay || !mapOverlay.getProjection) {
-    return new google.maps.Size(0, baseOffset);
-  }
-
-  const projection = mapOverlay.getProjection();
-  if (!projection) {
-    return new google.maps.Size(0, baseOffset);
-  }
-
-  const point = projection.fromLatLngToContainerPixel(position);
-  const mapDiv = map.getDiv ? map.getDiv() : null;
-  const mapHeight = mapDiv ? mapDiv.clientHeight : 0;
-  if (!point || !mapHeight) {
-    return new google.maps.Size(0, baseOffset);
-  }
-
-  const topPadding = 140;
-  const bottomPadding = 180;
-  let offsetY = baseOffset;
-
-  if (point.y < topPadding) {
-    offsetY += topPadding - point.y;
-  } else if (point.y > mapHeight - bottomPadding) {
-    offsetY -= point.y - (mapHeight - bottomPadding);
-  }
-
-  offsetY = Math.max(Math.min(offsetY, 200), -200);
-  return new google.maps.Size(0, Math.round(offsetY));
-}
-
-function adjustInfoWindowOffset(info, position) {
-  if (!info || !position || !map || !mapOverlay || !mapOverlay.getProjection) {
-    return;
-  }
-  const projection = mapOverlay.getProjection();
-  if (!projection) return;
-  const point = projection.fromLatLngToContainerPixel(position);
-  const mapDiv = map.getDiv ? map.getDiv() : null;
-  if (!point || !mapDiv) return;
-
-  const iw = document.querySelector(".gm-style-iw");
-  if (!iw) return;
-
-  const mapHeight = mapDiv.clientHeight || 0;
-  const iwHeight = iw.getBoundingClientRect().height || 0;
-  if (!mapHeight || !iwHeight) return;
-
-  const topPadding = 16;
-  const bottomPadding = 24;
-  const currentOffset = info.get("pixelOffset");
-  let offsetY = currentOffset && typeof currentOffset.height === "number" ? currentOffset.height : 0;
-
-  const top = point.y - iwHeight + offsetY;
-  const bottom = point.y + offsetY;
-
-  if (top < topPadding) {
-    offsetY += topPadding - top;
-  } else if (bottom > mapHeight - bottomPadding) {
-    offsetY -= bottom - (mapHeight - bottomPadding);
-  }
-
-  offsetY = Math.max(Math.min(offsetY, 240), -240);
-  if (!currentOffset || currentOffset.height !== Math.round(offsetY)) {
-    info.setOptions({ pixelOffset: new google.maps.Size(0, Math.round(offsetY)) });
-  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -169,16 +116,18 @@ document.addEventListener("DOMContentLoaded", () => {
   if (searchInput) {
     const placeholders = [
       "Ej: Sector PNR",
-      "Ej: Prisión",
+      "Ej: Prision",
       "Ej: Unidad Militar",
       "Ej: Tropas",
-      "Ej: Estación de policía",
-      "Ej: Centro de detención",
+      "Ej: Estacion de policia",
+      "Ej: Centro de detencion",
       "Ej: Brigada Especial",
     ];
     const pick = placeholders[Math.floor(Math.random() * placeholders.length)];
     searchInput.setAttribute("placeholder", pick);
   }
+
+  initMap();
 });
 
 function setupMapImageModal() {
@@ -224,22 +173,21 @@ function isAlertCategory(slug) {
   return ALERT_SLUGS.has(slug);
 }
 
-function buildMarkerContent(iconClass, imageUrl, slug) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "pin-icon";
-  if (isAlertCategory(slug)) {
-    wrapper.classList.add("alert");
-  }
-  if (imageUrl) {
-    const img = document.createElement("img");
-    img.src = imageUrl;
-    img.alt = "";
-    img.className = "pin-image";
-    wrapper.appendChild(img);
-  } else {
-    wrapper.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
-  }
-  return wrapper;
+function createMarkerIcon(iconClass, imageUrl, slug, pending) {
+  const classes = ["pin-icon"];
+  if (isAlertCategory(slug)) classes.push("alert");
+  if (pending) classes.push("pending");
+  const iconHtml = imageUrl
+    ? `<img src="${imageUrl}" alt="" class="pin-image" />`
+    : `<i class="fa-solid ${iconClass}"></i>`;
+
+  return L.divIcon({
+    className: "pin-icon-wrap",
+    html: `<div class="${classes.join(" ")}">${iconHtml}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -24],
+  });
 }
 
 function syncLegend() {
@@ -255,18 +203,19 @@ function syncLegend() {
 }
 
 function clearMarkers() {
-  markers.forEach((marker) => marker.setMap(null));
+  markers.forEach((marker) => marker.remove());
   markers = [];
-  pendingMarkers.forEach((marker) => marker.setMap(null));
+  pendingMarkers.forEach((marker) => marker.remove());
   pendingMarkers = [];
+  shapeLayers.forEach((layer) => layer.remove());
+  shapeLayers = [];
   markerIndex = new Map();
 }
 
-function closeActiveInfoWindow() {
-  if (activeInfoWindow) {
-    closeInfoWindowWithFade(activeInfoWindow);
-    activeInfoWindow = null;
-  }
+function closeActivePopup() {
+  if (!map || !activePopup) return;
+  map.closePopup(activePopup);
+  activePopup = null;
 }
 
 function getSelectedCategoryIds() {
@@ -292,303 +241,307 @@ async function loadPosts() {
   return await res.json();
 }
 
+function attachMediaThumbHandlers(container) {
+  if (!container) return;
+  const thumbs = container.querySelectorAll(".info-media-thumb");
+  thumbs.forEach((thumb) => {
+    thumb.addEventListener("click", () => {
+      const url = thumb.getAttribute("data-image");
+      const caption = thumb.getAttribute("data-caption") || "";
+      if (!url || !mapImageModal || !mapImageModalImg) return;
+      mapImageModalImg.src = url;
+      if (mapImageModalCaption) mapImageModalCaption.textContent = caption;
+      mapImageModal.setAttribute("aria-hidden", "false");
+      mapImageModal.classList.add("open");
+    });
+  });
+}
+
+function renderGeometry(post) {
+  if (!post?.polygon_geojson || !map) return;
+  try {
+    const geo = JSON.parse(post.polygon_geojson);
+    if (geo && geo.type === "Polygon" && geo.coordinates?.length) {
+      const latLngs = geo.coordinates[0].map(([lng, lat]) => [lat, lng]);
+      const polygon = L.polygon(latLngs, {
+        color: "#6ee7b7",
+        weight: 2,
+        opacity: 0.7,
+        fillColor: "#6ee7b7",
+        fillOpacity: 0.18,
+      }).addTo(map);
+      shapeLayers.push(polygon);
+    } else if (geo && geo.type === "Point" && geo.coordinates?.length && geo.radius_m) {
+      const circle = L.circle([geo.coordinates[1], geo.coordinates[0]], {
+        radius: geo.radius_m,
+        color: "#6ee7b7",
+        weight: 2,
+        opacity: 0.7,
+        fillColor: "#6ee7b7",
+        fillOpacity: 0.18,
+      }).addTo(map);
+      shapeLayers.push(circle);
+    }
+  } catch (err) {
+    // ignore invalid geometry
+  }
+}
+
+function attachPopupActions(post, popupElement, popupRef) {
+  if (!popupElement) return;
+
+  attachMediaThumbHandlers(popupElement);
+
+  const detailBtn = popupElement.querySelector(`#detailBtn-${post.id}`);
+  if (detailBtn) {
+    detailBtn.addEventListener("click", () => {
+      const url = detailBtn.getAttribute("data-detail-url");
+      if (!url) return;
+      window.location.href = url;
+    });
+  }
+
+  const copyBtn = popupElement.querySelector(`#copyLinkBtn-${post.id}`);
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async () => {
+      const url = copyBtn.getAttribute("data-copy-url");
+      if (!url) return;
+      const full = `${window.location.origin}${url}`;
+      try {
+        await navigator.clipboard.writeText(full);
+        copyBtn.textContent = "Enlace copiado";
+        setTimeout(() => (copyBtn.textContent = "Copiar enlace"), 1500);
+      } catch (err) {
+        copyBtn.textContent = "Copia manual";
+      }
+    });
+  }
+
+  const reportBtn = popupElement.querySelector("#reportLocationBtn");
+  if (reportBtn) {
+    reportBtn.addEventListener("click", () => {
+      const url = reportBtn.getAttribute("data-report-url");
+      if (!url) return;
+      if (window.openReportModal) {
+        window.openReportModal(url);
+      } else {
+        window.location.href = url;
+      }
+    });
+  }
+
+  const historyBtn = popupElement.querySelector("#viewHistoryBtn");
+  if (historyBtn) {
+    historyBtn.addEventListener("click", () => {
+      const url = historyBtn.getAttribute("data-history-url");
+      if (!url) return;
+      if (window.openReportModal) {
+        window.openReportModal(url);
+      } else {
+        window.location.href = url;
+      }
+    });
+  }
+
+  const verifyBtn = popupElement.querySelector(`#verifyBtn-${post.id}`);
+  if (verifyBtn) {
+    verifyBtn.addEventListener("click", async () => {
+      if (verifyBtn.disabled) return;
+      const res = await fetch(`/api/posts/${post.id}/verify`, { method: "POST" });
+      const data = await res.json();
+      const countEl = popupElement.querySelector(`#verifyCount-${post.id}`);
+      if (countEl && typeof data.verify_count !== "undefined") {
+        countEl.textContent = data.verify_count;
+      }
+      if (data && data.ok) {
+        verifyBtn.disabled = true;
+        verifyBtn.textContent = "Verificado";
+        verifyBtn.classList.add("is-verified");
+        verifyBtn.setAttribute("data-verified", "1");
+      }
+    });
+  }
+
+  const editBtn = popupElement.querySelector(`#editBtn-${post.id}`);
+  if (editBtn) {
+    editBtn.addEventListener("click", () => {
+      const url = editBtn.getAttribute("data-edit-url");
+      if (!url) return;
+      if (window.openReportModal) {
+        window.openReportModal(url);
+      } else {
+        window.location.href = url;
+      }
+    });
+  }
+
+  if (!isAdmin) return;
+
+  const hideBtn = popupElement.querySelector(`#hideBtn-${post.id}`);
+  const deleteBtn = popupElement.querySelector(`#deleteBtn-${post.id}`);
+
+  const updateStatus = async (status) => {
+    const res = await fetch(`/api/posts/${post.id}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    return await res.json();
+  };
+
+  if (hideBtn) {
+    hideBtn.addEventListener("click", async () => {
+      if (!confirm("Ocultar este reporte?")) return;
+      const result = await updateStatus("hidden");
+      if (result && result.ok) {
+        allPosts = allPosts.filter((p) => p.id !== post.id);
+        applyFilters();
+        if (map && popupRef) map.closePopup(popupRef);
+      }
+    });
+  }
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm("Eliminar este reporte?")) return;
+      const result = await updateStatus("deleted");
+      if (result && result.ok) {
+        allPosts = allPosts.filter((p) => p.id !== post.id);
+        applyFilters();
+        if (map && popupRef) map.closePopup(popupRef);
+      }
+    });
+  }
+}
+
+function popupHtmlForPost(post) {
+  const created = post.created_at ? new Date(post.created_at) : null;
+  const createdText = created ? created.toLocaleString("es-ES") : "";
+  const safeTitle = escapeHtml(post.title);
+  const safeCategory = escapeHtml(post.category?.name || "");
+  const safeAnon = escapeHtml(post.anon || "Anon");
+  const safeDescription = escapeHtml(post.description || "");
+  const safeAddress = escapeHtml(post.address || "");
+  const mediaItems = Array.isArray(post.media) ? post.media : [];
+  const mediaHtml = mediaItems.length
+    ? `<div class="info-media">
+        ${mediaItems
+          .slice(0, 4)
+          .map((item) => {
+            const url = typeof item === "string" ? item : item?.url;
+            if (!url) return "";
+            const caption = typeof item === "string" ? "" : item?.caption || "";
+            const safeCaption = escapeHtml(caption);
+            return `
+              <button class="info-media-thumb" type="button" data-image="${url}" data-caption="${safeCaption}">
+                <img src="${url}" alt="Imagen del reporte" />
+              </button>
+            `;
+          })
+          .join("")}
+      </div>`
+    : "";
+  const editLocked = !isAdmin && (post.verify_count ?? 0) >= 10;
+  const verifiedByMe = !!post.verified_by_me;
+  const verifyLabel = verifiedByMe ? "Verificado" : "Verificar";
+  const verifyDisabled = verifiedByMe ? "disabled data-verified=\"1\"" : "";
+
+  return `
+    <div style="color:#111;max-width:260px;">
+      <h3 style="margin:0 0 6px;">${safeTitle}</h3>
+      <div style="font-size:12px;color:#555;margin-bottom:6px;">${safeCategory}</div>
+      <div style="font-size:12px;color:#333;margin-bottom:6px;">${safeAnon}</div>
+      ${createdText ? `<div style="font-size:12px;color:#666;margin-bottom:6px;">${createdText}</div>` : ""}
+      <p style="margin:0 0 6px;">${safeDescription}</p>
+      ${mediaHtml}
+      ${
+        post.links && post.links.length
+          ? `<div style="font-size:12px;margin-top:6px;">
+               ${post.links
+                 .map((link) => {
+                   const href = safeUrl(link);
+                   if (!href) return "";
+                   const label = escapeHtml(link);
+                   return `<div><a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a></div>`;
+                 })
+                 .join("")}
+            </div>`
+          : ""
+      }
+      <div class="info-actions">
+        <button id="detailBtn-${post.id}" data-detail-url="/reporte/${post.id}" class="info-btn info-btn-outline">Ver detalle</button>
+        <button id="copyLinkBtn-${post.id}" data-copy-url="/reporte/${post.id}" class="info-btn info-btn-outline">Copiar enlace</button>
+        <button id="reportLocationBtn" data-report-url="/reportar-ubicacion/${post.id}" class="info-btn info-btn-outline">Reportar ubicacion</button>
+        <button id="viewHistoryBtn" data-history-url="/reporte/${post.id}/historial" class="info-btn info-btn-outline info-btn-blue">Ver historial</button>
+        <button id="verifyBtn-${post.id}" data-verify-id="${post.id}" class="info-btn info-btn-solid ${verifiedByMe ? "is-verified" : ""}" ${verifyDisabled}>${verifyLabel}</button>
+        <span id="verifyCount-${post.id}" class="info-badge">${post.verify_count ?? 0}</span>
+        ${
+          editLocked
+            ? `<span style="font-size:11px;color:#777;">Edicion bloqueada: 10+ verificaciones. Puedes comentar y reportar ubicacion si hay datos erroneos.</span>`
+            : `<button id="editBtn-${post.id}" data-edit-url="/reporte/${post.id}/editar" class="info-btn info-btn-outline">Editar</button>`
+        }
+        ${
+          isAdmin
+            ? `
+              <button id="hideBtn-${post.id}" data-status="hidden" class="info-btn info-btn-outline">Ocultar</button>
+              <button id="deleteBtn-${post.id}" data-status="deleted" class="info-btn info-btn-outline">Eliminar</button>
+            `
+            : ""
+        }
+      </div>
+      ${post.address ? `<div style="font-size:12px;color:#666;">${safeAddress}</div>` : ""}
+    </div>
+  `;
+}
+
 function renderMarkers(posts) {
   clearMarkers();
+
   posts.forEach((post) => {
-    const position = { lat: post.latitude, lng: post.longitude };
+    const lat = Number(post.latitude);
+    const lng = Number(post.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
     const slug = post.category?.slug;
     const iconClass = CATEGORY_ICONS[slug] || "fa-location-dot";
     const imageUrl = CATEGORY_IMAGES[slug];
-    let marker;
 
-    if (google.maps.marker && google.maps.marker.AdvancedMarkerElement) {
-      marker = new google.maps.marker.AdvancedMarkerElement({
-        position,
-        map,
-        title: post.title,
-        content: buildMarkerContent(iconClass, imageUrl, slug),
-      });
-    } else {
-      marker = new google.maps.Marker({
-        position,
-        map,
-        title: post.title,
-        icon: imageUrl
-          ? {
-              url: imageUrl,
-              scaledSize: new google.maps.Size(28, 28),
-            }
-          : undefined,
-      });
-    }
+    const marker = L.marker([lat, lng], {
+      title: post.title,
+      icon: createMarkerIcon(iconClass, imageUrl, slug, false),
+    }).addTo(map);
 
-    const created = post.created_at ? new Date(post.created_at) : null;
-    const createdText = created ? created.toLocaleString("es-ES") : "";
-    const safeTitle = escapeHtml(post.title);
-    const safeCategory = escapeHtml(post.category?.name || "");
-    const safeAnon = escapeHtml(post.anon || "Anon");
-    const safeDescription = escapeHtml(post.description || "");
-    const safeAddress = escapeHtml(post.address || "");
-    const mediaItems = Array.isArray(post.media) ? post.media : [];
-    const mediaHtml = mediaItems.length
-      ? `<div class="info-media">
-          ${mediaItems
-            .slice(0, 4)
-            .map((item) => {
-              const url = typeof item === "string" ? item : item?.url;
-              if (!url) return "";
-              const caption = typeof item === "string" ? "" : item?.caption || "";
-              const safeCaption = escapeHtml(caption);
-              return `
-                <button class="info-media-thumb" type="button" data-image="${url}" data-caption="${safeCaption}">
-                  <img src="${url}" alt="Imagen del reporte" />
-                </button>
-              `;
-            })
-            .join("")}
-        </div>`
-      : "";
-    const editLocked = !isAdmin && (post.verify_count ?? 0) >= 10;
-    const verifiedByMe = !!post.verified_by_me;
-    const verifyLabel = verifiedByMe ? "Verificado" : "Verificar";
-    const verifyDisabled = verifiedByMe ? "disabled data-verified=\"1\"" : "";
-    const info = new google.maps.InfoWindow({
-      content: `
-        <div style="color:#111;max-width:260px;">
-          <h3 style="margin:0 0 6px;">${safeTitle}</h3>
-          <div style="font-size:12px;color:#555;margin-bottom:6px;">${safeCategory}</div>
-          <div style="font-size:12px;color:#333;margin-bottom:6px;">${safeAnon}</div>
-          ${createdText ? `<div style="font-size:12px;color:#666;margin-bottom:6px;">${createdText}</div>` : ""}
-          <p style="margin:0 0 6px;">${safeDescription}</p>
-          ${mediaHtml}
-          ${
-            post.links && post.links.length
-              ? `<div style="font-size:12px;margin-top:6px;">
-                   ${post.links
-                     .map((link) => {
-                       const href = safeUrl(link);
-                       if (!href) return "";
-                       const label = escapeHtml(link);
-                       return `<div><a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a></div>`;
-                     })
-                     .join("")}
-                </div>`
-              : ""
-          }
-          <div class="info-actions">
-            <button id="detailBtn-${post.id}" data-detail-url="/reporte/${post.id}" class="info-btn info-btn-outline">Ver detalle</button>
-            <button id="copyLinkBtn-${post.id}" data-copy-url="/reporte/${post.id}" class="info-btn info-btn-outline">Copiar enlace</button>
-            <button id="reportLocationBtn" data-report-url="/reportar-ubicacion/${post.id}" class="info-btn info-btn-outline">Reportar ubicación</button>
-            <button id="viewHistoryBtn" data-history-url="/reporte/${post.id}/historial" class="info-btn info-btn-outline info-btn-blue">Ver historial</button>
-            <button id="verifyBtn-${post.id}" data-verify-id="${post.id}" class="info-btn info-btn-solid ${verifiedByMe ? "is-verified" : ""}" ${verifyDisabled}>${verifyLabel}</button>
-            <span id="verifyCount-${post.id}" class="info-badge">${post.verify_count ?? 0}</span>
-            ${
-              editLocked
-                ? `<span style="font-size:11px;color:#777;">Edición bloqueada: 10+ verificaciones. Puedes comentar y reportar ubicación si hay datos erróneos.</span>`
-                : `<button id="editBtn-${post.id}" data-edit-url="/reporte/${post.id}/editar" class="info-btn info-btn-outline">Editar</button>`
-            }
-            ${
-              isAdmin
-                ? `
-                  <button id="hideBtn-${post.id}" data-status="hidden" class="info-btn info-btn-outline">Ocultar</button>
-                  <button id="deleteBtn-${post.id}" data-status="deleted" class="info-btn info-btn-outline">Eliminar</button>
-                `
-                : ""
-            }
-          </div>
-          ${post.address ? `<div style="font-size:12px;color:#666;">${safeAddress}</div>` : ""}
-        </div>
-      `,
-      pixelOffset: getInfoWindowOffset(position),
-    });
-    google.maps.event.addListener(info, "domready", () => {
-      fadeInInfoWindow(info);
-      adjustInfoWindowOffset(info, position);
-      const thumbs = document.querySelectorAll(".info-media-thumb");
-      thumbs.forEach((thumb) => {
-        thumb.addEventListener("click", () => {
-          const url = thumb.getAttribute("data-image");
-          const caption = thumb.getAttribute("data-caption") || "";
-          if (!url || !mapImageModal || !mapImageModalImg) return;
-          mapImageModalImg.src = url;
-          if (mapImageModalCaption) mapImageModalCaption.textContent = caption;
-          mapImageModal.setAttribute("aria-hidden", "false");
-          mapImageModal.classList.add("open");
-        });
-      });
-      const detailBtn = document.getElementById(`detailBtn-${post.id}`);
-      if (detailBtn) {
-        detailBtn.addEventListener("click", () => {
-          const url = detailBtn.getAttribute("data-detail-url");
-          if (!url) return;
-          window.location.href = url;
-        });
-      }
-      const copyBtn = document.getElementById(`copyLinkBtn-${post.id}`);
-      if (copyBtn) {
-        copyBtn.addEventListener("click", async () => {
-          const url = copyBtn.getAttribute("data-copy-url");
-          if (!url) return;
-          const full = `${window.location.origin}${url}`;
-          try {
-            await navigator.clipboard.writeText(full);
-            copyBtn.textContent = "Enlace copiado";
-            setTimeout(() => (copyBtn.textContent = "Copiar enlace"), 1500);
-          } catch (e) {
-            copyBtn.textContent = "Copia manual";
-          }
-        });
-      }
-      const reportBtn = document.getElementById("reportLocationBtn");
-      if (reportBtn) {
-        reportBtn.addEventListener("click", () => {
-          const url = reportBtn.getAttribute("data-report-url");
-          if (!url) return;
-          if (window.openReportModal) {
-            window.openReportModal(url);
-          } else {
-            window.location.href = url;
-          }
-        });
-      }
-      const historyBtn = document.getElementById("viewHistoryBtn");
-      if (historyBtn) {
-        historyBtn.addEventListener("click", () => {
-          const url = historyBtn.getAttribute("data-history-url");
-          if (!url) return;
-          if (window.openReportModal) {
-            window.openReportModal(url);
-          } else {
-            window.location.href = url;
-          }
-        });
-      }
-      const verifyBtn = document.getElementById(`verifyBtn-${post.id}`);
-      if (verifyBtn) {
-        verifyBtn.addEventListener("click", async () => {
-          if (verifyBtn.disabled) return;
-          const res = await fetch(`/api/posts/${post.id}/verify`, { method: "POST" });
-          const data = await res.json();
-          const countEl = document.getElementById(`verifyCount-${post.id}`);
-          if (countEl && typeof data.verify_count !== "undefined") {
-            countEl.textContent = data.verify_count;
-          }
-          if (data && data.ok) {
-            verifyBtn.disabled = true;
-            verifyBtn.textContent = "Verificado";
-            verifyBtn.classList.add("is-verified");
-            verifyBtn.setAttribute("data-verified", "1");
-          }
-        });
-      }
-      const editBtn = document.getElementById(`editBtn-${post.id}`);
-      if (editBtn) {
-        editBtn.addEventListener("click", () => {
-          const url = editBtn.getAttribute("data-edit-url");
-          if (!url) return;
-          if (window.openReportModal) {
-            window.openReportModal(url);
-          } else {
-            window.location.href = url;
-          }
-        });
-      }
+    const popupHtml = popupHtmlForPost(post);
+    marker.bindPopup(popupHtml, { maxWidth: 300 });
 
-      if (isAdmin) {
-        const hideBtn = document.getElementById(`hideBtn-${post.id}`);
-        const deleteBtn = document.getElementById(`deleteBtn-${post.id}`);
-        const updateStatus = async (status) => {
-          const res = await fetch(`/api/posts/${post.id}/status`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status }),
-          });
-          return await res.json();
-        };
-        if (hideBtn) {
-          hideBtn.addEventListener("click", async () => {
-            if (!confirm("¿Ocultar este reporte?")) return;
-            const result = await updateStatus("hidden");
-          if (result && result.ok) {
-            allPosts = allPosts.filter((p) => p.id !== post.id);
-            applyFilters();
-            closeInfoWindowWithFade(info);
-          }
-        });
-      }
-      if (deleteBtn) {
-        deleteBtn.addEventListener("click", async () => {
-          if (!confirm("¿Eliminar este reporte?")) return;
-          const result = await updateStatus("deleted");
-          if (result && result.ok) {
-            allPosts = allPosts.filter((p) => p.id !== post.id);
-            applyFilters();
-            closeInfoWindowWithFade(info);
-          }
-        });
-      }
-      }
+    marker.on("popupopen", (evt) => {
+      activePopup = evt.popup;
+      const popupElement = evt.popup.getElement();
+      attachPopupActions(post, popupElement, evt.popup);
     });
 
-    marker.addListener("click", () => {
-      closeActiveInfoWindow();
-      if (clickInfo) {
-        closeInfoWindowWithFade(clickInfo);
-      }
-      info.setOptions({ pixelOffset: getInfoWindowOffset(position) });
-      info.open({ anchor: marker, map });
-      activeInfoWindow = info;
+    marker.on("click", () => {
+      closeActivePopup();
+      marker.openPopup();
     });
+
     markers.push(marker);
-    markerIndex.set(post.id, { marker, info, post });
-
-    if (post.polygon_geojson) {
-      try {
-        const geo = JSON.parse(post.polygon_geojson);
-        if (geo && geo.type === "Polygon" && geo.coordinates?.length) {
-          const path = geo.coordinates[0].map(([lng, lat]) => ({ lat, lng }));
-          new google.maps.Polygon({
-            paths: path,
-            strokeColor: "#6ee7b7",
-            strokeOpacity: 0.7,
-            strokeWeight: 2,
-            fillColor: "#6ee7b7",
-            fillOpacity: 0.18,
-            map,
-          });
-        } else if (geo && geo.type === "Point" && geo.coordinates?.length && geo.radius_m) {
-          new google.maps.Circle({
-            center: { lat: geo.coordinates[1], lng: geo.coordinates[0] },
-            radius: geo.radius_m,
-            strokeColor: "#6ee7b7",
-            strokeOpacity: 0.7,
-            strokeWeight: 2,
-            fillColor: "#6ee7b7",
-            fillOpacity: 0.18,
-            map,
-          });
-        }
-      } catch (e) {
-        // ignore invalid geojson
-      }
-    }
+    markerIndex.set(post.id, { marker, post });
+    renderGeometry(post);
   });
 }
 
 function openPostOnMap(post) {
   if (!post || !map) return;
-  const position = { lat: post.latitude, lng: post.longitude };
-  map.panTo(position);
-  map.setZoom(Math.max(map.getZoom(), 14));
+  const lat = Number(post.latitude);
+  const lng = Number(post.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+  map.setView([lat, lng], Math.max(map.getZoom(), 14));
   const entry = markerIndex.get(post.id);
-  if (entry && entry.info) {
-    closeActiveInfoWindow();
-    if (clickInfo) {
-      closeInfoWindowWithFade(clickInfo);
-    }
-    entry.info.setOptions({ pixelOffset: getInfoWindowOffset(position) });
-    entry.info.open({ anchor: entry.marker, map });
-    activeInfoWindow = entry.info;
+  if (entry?.marker) {
+    closeActivePopup();
+    entry.marker.openPopup();
   }
 }
 
@@ -609,54 +562,33 @@ function updateLegendCounts(posts) {
 
 window.handleNewReport = function (payload) {
   if (!payload || !map) return;
-  const position = { lat: payload.latitude, lng: payload.longitude };
+  const lat = Number(payload.latitude);
+  const lng = Number(payload.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
   const slug = payload.category?.slug;
   const iconClass = CATEGORY_ICONS[slug] || "fa-location-dot";
   const imageUrl = CATEGORY_IMAGES[slug];
 
   if (payload.status !== "approved") {
-    let marker;
-    if (google.maps.marker && google.maps.marker.AdvancedMarkerElement) {
-      marker = new google.maps.marker.AdvancedMarkerElement({
-        position,
-        map,
-        title: payload.title || "Reporte pendiente",
-        content: buildMarkerContent("fa-hourglass-half", imageUrl, slug),
-      });
-    } else {
-      marker = new google.maps.Marker({
-        position,
-        map,
-        title: payload.title || "Reporte pendiente",
-        icon: imageUrl
-          ? {
-              url: imageUrl,
-              scaledSize: new google.maps.Size(28, 28),
-            }
-          : undefined,
-      });
-    }
-    pendingMarkers.push(marker);
-    map.panTo(position);
-    const info = new google.maps.InfoWindow({
-      content: `
-        <div style="color:#111;max-width:240px;">
-          <strong>Reporte enviado a moderación.</strong>
-          <div style="font-size:12px;margin-top:6px;">Se mostrará cuando sea aprobado.</div>
-        </div>
+    const marker = L.marker([lat, lng], {
+      title: payload.title || "Reporte pendiente",
+      icon: createMarkerIcon("fa-hourglass-half", imageUrl, slug, true),
+    }).addTo(map);
+
+    marker.bindPopup(
+      `
+      <div style="color:#111;max-width:240px;">
+        <strong>Reporte enviado a moderacion.</strong>
+        <div style="font-size:12px;margin-top:6px;">Se mostrara cuando sea aprobado.</div>
+      </div>
       `,
-      pixelOffset: getInfoWindowOffset(position),
-    });
-    google.maps.event.addListener(info, "domready", () => {
-      fadeInInfoWindow(info);
-      adjustInfoWindowOffset(info, position);
-    });
-    closeActiveInfoWindow();
-    if (clickInfo) {
-      closeInfoWindowWithFade(clickInfo);
-    }
-    info.open({ anchor: marker, map });
-    activeInfoWindow = info;
+      { maxWidth: 260 }
+    );
+
+    pendingMarkers.push(marker);
+    map.setView([lat, lng], Math.max(map.getZoom(), 12));
+    marker.openPopup();
     refreshRecent();
     refreshAlerts();
     return;
@@ -666,35 +598,8 @@ window.handleNewReport = function (payload) {
     allPosts.unshift(payload);
   }
   updateLegendCounts(allPosts);
-  const selected = getSelectedCategoryIds();
-  if (selected.size && payload.category?.id && !selected.has(payload.category.id)) {
-    refreshRecent();
-    map.panTo(position);
-    return;
-  }
-  let marker;
-  if (google.maps.marker && google.maps.marker.AdvancedMarkerElement) {
-    marker = new google.maps.marker.AdvancedMarkerElement({
-      position,
-      map,
-      title: payload.title,
-      content: buildMarkerContent(iconClass, imageUrl, slug),
-    });
-  } else {
-    marker = new google.maps.Marker({
-      position,
-      map,
-      title: payload.title,
-      icon: imageUrl
-        ? {
-            url: imageUrl,
-            scaledSize: new google.maps.Size(28, 28),
-          }
-        : undefined,
-    });
-  }
-  map.panTo(position);
-  markers.push(marker);
+  applyFilters();
+  map.setView([lat, lng], Math.max(map.getZoom(), 12));
   refreshRecent();
   refreshAlerts();
 };
@@ -702,9 +607,7 @@ window.handleNewReport = function (payload) {
 async function applyFilters() {
   const selected = getSelectedCategoryIds();
   const { province, municipality } = getSelectedLocationFilters();
-  let filtered = selected.size
-    ? allPosts.filter((post) => selected.has(post.category?.id))
-    : [];
+  let filtered = selected.size ? allPosts.filter((post) => selected.has(post.category?.id)) : [];
 
   if (province) {
     filtered = filtered.filter((post) => post.province === province);
@@ -712,6 +615,7 @@ async function applyFilters() {
   if (municipality) {
     filtered = filtered.filter((post) => post.municipality === municipality);
   }
+
   updateLegendCounts(allPosts);
   renderMarkers(filtered);
 }
@@ -731,7 +635,7 @@ function renderRecent(posts) {
   if (!container) return;
 
   if (!posts.length) {
-    container.innerHTML = `<div class="console-empty">Sin aportaciones visibles aún.</div>`;
+    container.innerHTML = `<div class="console-empty">Sin aportaciones visibles aun.</div>`;
     return;
   }
 
@@ -838,7 +742,7 @@ async function refreshRecent() {
     const posts = await loadRecent();
     renderRecent(posts);
   } catch (err) {
-    // no-op for now
+    // no-op
   }
 }
 
@@ -851,109 +755,112 @@ async function refreshAlerts() {
   }
 }
 
-window.initMap = async function () {
+async function searchInCuba(query) {
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=cu&q=${encodeURIComponent(
+    query
+  )}`;
+  const res = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!Array.isArray(data) || !data.length) return null;
+
+  const result = data.find((item) =>
+    isWithinCubaBounds({ lat: Number(item.lat), lng: Number(item.lon) })
+  );
+  if (!result) return null;
+
+  return {
+    lat: Number(result.lat),
+    lng: Number(result.lon),
+    label: result.display_name || query,
+  };
+}
+
+function focusSearchResult(result) {
+  if (!map || !result) return;
+  map.setView([result.lat, result.lng], Math.max(map.getZoom(), 16));
+
+  if (searchMarker) {
+    searchMarker.remove();
+  }
+
+  searchMarker = L.marker([result.lat, result.lng], {
+    title: result.label || "Busqueda",
+  }).addTo(map);
+}
+
+async function initMap() {
   setupMapImageModal();
   syncLegend();
+
   const mapEl = document.getElementById("map");
-  const apiKey = mapEl.dataset.apiKey;
-  isAdmin = mapEl.dataset.isAdmin === "1";
-  if (!apiKey) {
+  if (!mapEl || typeof L === "undefined") {
     refreshRecent();
     refreshAlerts();
     return;
   }
 
-  const isMobile = window.matchMedia("(max-width: 900px)").matches;
-  const baseZoom = isMobile ? 6 : 7;
+  isAdmin = mapEl.dataset.isAdmin === "1";
 
-  map = new google.maps.Map(mapEl, {
-    center: { lat: 21.521757, lng: -77.781167 },
-    zoom: baseZoom,
-    minZoom: 0,
-    maxZoom: undefined,
-    restriction: { latLngBounds: CUBA_BOUNDS, strictBounds: true },
-    mapId: mapEl.dataset.mapId || undefined,
-    mapTypeId: "hybrid",
-    tilt: 0,
-    heading: 0,
-    rotateControl: true,
-    fullscreenControl: true,
-    gestureHandling: "greedy",
+  map = L.map(mapEl, {
     zoomControl: true,
-    scrollwheel: true,
-    disableDoubleClickZoom: false,
-    keyboardShortcuts: true,
-    // Styles should be managed via Map ID when present
+    minZoom: 4,
+    maxZoom: 19,
+  });
+  enableMiddleClickPan(map);
+
+  const streetsLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
   });
 
-  mapOverlay = new google.maps.OverlayView();
-  mapOverlay.onAdd = function () {};
-  mapOverlay.draw = function () {};
-  mapOverlay.setMap(map);
-
-  const bounds = new google.maps.LatLngBounds(
-    { lat: CUBA_BOUNDS.south, lng: CUBA_BOUNDS.west },
-    { lat: CUBA_BOUNDS.north, lng: CUBA_BOUNDS.east }
-  );
-  map.fitBounds(bounds);
-  google.maps.event.addListenerOnce(map, "idle", () => {
-    const currentZoom = map.getZoom();
-    if (typeof currentZoom === "number") {
-      const relaxedZoom = Math.max(currentZoom - 3, 3);
-      map.setZoom(relaxedZoom);
-      map.setOptions({ minZoom: relaxedZoom });
+  const satelliteLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      attribution:
+        'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+      maxZoom: 19,
     }
-  });
+  );
+
+  streetsLayer.addTo(map);
+  L.control
+    .layers(
+      {
+        Mapa: streetsLayer,
+        Satelite: satelliteLayer,
+      },
+      {},
+      { collapsed: true }
+    )
+    .addTo(map);
+
+  const cubaBounds = cubaLatLngBounds();
+  map.fitBounds(cubaBounds);
+  map.setMaxBounds(cubaBounds.pad(0.35));
 
   const params = new URLSearchParams(window.location.search);
   const latParam = parseFloat(params.get("lat"));
   const lngParam = parseFloat(params.get("lng"));
   if (Number.isFinite(latParam) && Number.isFinite(lngParam)) {
-    const target = { lat: latParam, lng: lngParam };
-    map.setCenter(target);
-    map.setZoom(Math.max(map.getZoom(), 14));
-    new google.maps.Marker({ position: target, map, title: "Ubicación" });
+    map.setView([latParam, lngParam], Math.max(map.getZoom(), 14));
+    L.marker([latParam, lngParam], { title: "Ubicacion" }).addTo(map);
   }
 
   const searchInput = document.getElementById("mapSearch");
-  if (searchInput && google.maps.places) {
-    const cubaBounds = new google.maps.LatLngBounds(
-      { lat: 19.8, lng: -85.2 },
-      { lat: 23.7, lng: -73.9 }
-    );
-    geocoder = new google.maps.Geocoder();
-    autocomplete = new google.maps.places.Autocomplete(searchInput, {
-      bounds: cubaBounds,
-      strictBounds: false,
-      componentRestrictions: { country: "cu" },
-      fields: ["geometry", "name", "formatted_address"],
-    });
-    autocomplete.addListener("place_changed", () => {
-      const place = autocomplete.getPlace();
-      if (!place.geometry || !place.geometry.location) return;
-      if (!isWithinCubaBounds(place.geometry.location)) return;
-      focusSearchResult(place.geometry, place.formatted_address || place.name);
-    });
-
-    searchInput.addEventListener("keydown", (e) => {
+  if (searchInput) {
+    searchInput.addEventListener("keydown", async (e) => {
       if (e.key !== "Enter") return;
       e.preventDefault();
       const query = searchInput.value.trim();
-      if (!query || !geocoder) return;
-      geocoder.geocode(
-        {
-          address: query,
-          bounds: cubaBounds,
-          componentRestrictions: { country: "cu" },
-          region: "cu",
-        },
-        (results, status) => {
-          if (status !== "OK" || !results?.length) return;
-          const result = results.find((item) => isWithinCubaBounds(item.geometry?.location));
-          if (!result) return;
-          focusSearchResult(result.geometry, result.formatted_address);
-        }
-      );
+      if (!query) return;
+      const found = await searchInCuba(query);
+      if (!found) return;
+      focusSearchResult(found);
     });
   }
 
@@ -996,40 +903,38 @@ window.initMap = async function () {
     municipalitySelect.addEventListener("change", applyFilters);
   }
 
-  clickInfo = new google.maps.InfoWindow({ pixelOffset: getInfoWindowOffset() });
-  map.addListener("click", (event) => {
-    closeActiveInfoWindow();
-    const lat = event.latLng.lat().toFixed(6);
-    const lng = event.latLng.lng().toFixed(6);
+  map.on("click", (event) => {
+    closeActivePopup();
+    const lat = event.latlng.lat.toFixed(6);
+    const lng = event.latlng.lng.toFixed(6);
     const newUrl = mapEl.dataset.newUrl;
 
-    clickInfo.setContent(`
-      <div style="color:#111;max-width:240px;">
-        <div style="font-weight:600;margin-bottom:8px;">Crear reporte aquí</div>
-        <button id="createReportBtn" style="background:#6ee7b7;border:none;padding:8px 10px;border-radius:6px;cursor:pointer;">Abrir formulario</button>
-      </div>
-    `);
-    clickInfo.setPosition(event.latLng);
-    clickInfo.setOptions({ pixelOffset: getInfoWindowOffset(event.latLng) });
-    clickInfo.open(map);
+    const popup = L.popup({ maxWidth: 260 })
+      .setLatLng(event.latlng)
+      .setContent(`
+        <div style="color:#111;max-width:240px;">
+          <div style="font-weight:600;margin-bottom:8px;">Crear reporte aqui</div>
+          <button id="createReportBtn" style="background:#6ee7b7;border:none;padding:8px 10px;border-radius:6px;cursor:pointer;">Abrir formulario</button>
+        </div>
+      `)
+      .openOn(map);
 
-    google.maps.event.addListenerOnce(clickInfo, "domready", () => {
-      fadeInInfoWindow(clickInfo);
-      adjustInfoWindowOffset(clickInfo, event.latLng);
+    activePopup = popup;
+
+    setTimeout(() => {
       const btn = document.getElementById("createReportBtn");
-      if (btn) {
-        btn.addEventListener("click", () => {
-          const zoom = map ? map.getZoom() : "";
-          const zoomParam = Number.isFinite(zoom) ? `&zoom=${zoom}` : "";
-          const targetUrl = `${newUrl}?lat=${lat}&lng=${lng}${zoomParam}`;
-          if (window.openReportModal) {
-            window.openReportModal(targetUrl);
-          } else {
-            window.location.href = targetUrl;
-          }
-        });
-      }
-    });
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        const zoom = map ? map.getZoom() : "";
+        const zoomParam = Number.isFinite(zoom) ? `&zoom=${zoom}` : "";
+        const targetUrl = `${newUrl}?lat=${lat}&lng=${lng}${zoomParam}`;
+        if (window.openReportModal) {
+          window.openReportModal(targetUrl);
+        } else {
+          window.location.href = targetUrl;
+        }
+      });
+    }, 0);
   });
 
   if (recentTimer) {
@@ -1039,48 +944,4 @@ window.initMap = async function () {
     refreshRecent();
     refreshAlerts();
   }, 8000);
-};
-
-document.addEventListener("DOMContentLoaded", () => {
-  const alertFeed = document.getElementById("alertFeed");
-  const recentFeed = document.getElementById("recentFeed");
-  if (!alertFeed && !recentFeed) return;
-
-  refreshRecent();
-  refreshAlerts();
-
-  if (!recentTimer) {
-    recentTimer = setInterval(() => {
-      refreshRecent();
-      refreshAlerts();
-    }, 8000);
-  }
-});
-
-function focusSearchResult(geometry, label) {
-  const location = geometry.location || geometry.viewport?.getCenter();
-  if (geometry.viewport) {
-    map.fitBounds(geometry.viewport);
-    if (location) {
-      google.maps.event.addListenerOnce(map, "idle", () => {
-        map.panTo(location);
-        map.setZoom(Math.max(map.getZoom(), 16));
-      });
-    }
-  } else if (location) {
-    map.panTo(location);
-    map.setZoom(Math.max(map.getZoom(), 16));
-  }
-
-  if (searchMarker) {
-    searchMarker.setMap(null);
-  }
-  const position = location;
-  if (position) {
-    searchMarker = new google.maps.Marker({
-      position,
-      map,
-      title: label || "Búsqueda",
-    });
-  }
 }

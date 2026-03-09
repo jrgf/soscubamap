@@ -1787,7 +1787,8 @@ textarea {
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 50;
+  z-index: 2200;
+  isolation: isolate;
   padding: 20px;
 }
 

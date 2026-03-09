@@ -394,62 +394,137 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindThumbnails();
 });
 
-window.initDetailMap = function () {
+function enableMiddleClickPan(leafletMap) {
+  const container = leafletMap?.getContainer?.();
+  if (!container) return;
+
+  let middleDown = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  const onMouseMove = (event) => {
+    if (!middleDown) return;
+    event.preventDefault();
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    if (!dx && !dy) return;
+    leafletMap.panBy([-dx, -dy], { animate: false, noMoveStart: true });
+    lastX = event.clientX;
+    lastY = event.clientY;
+  };
+
+  const stopMiddlePan = () => {
+    if (!middleDown) return;
+    middleDown = false;
+    container.style.cursor = "";
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+  };
+
+  const onMouseUp = (event) => {
+    if (event.button !== 1 && !middleDown) return;
+    stopMiddlePan();
+  };
+
+  container.addEventListener(
+    "mousedown",
+    (event) => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      middleDown = true;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      container.style.cursor = "grabbing";
+      window.addEventListener("mousemove", onMouseMove, { passive: false });
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    { passive: false }
+  );
+
+  container.addEventListener("auxclick", (event) => {
+    if (event.button === 1) event.preventDefault();
+  });
+}
+
+function initDetailMap() {
   const mapEl = document.getElementById("detailMap");
-  if (!mapEl || !window.google?.maps) return;
+  if (!mapEl || typeof L === "undefined") return;
 
   const lat = parseFloat(mapEl.dataset.lat);
   const lng = parseFloat(mapEl.dataset.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-  const CUBA_BOUNDS = {
-    north: 24.2,
-    south: 19.0,
-    west: -86.2,
-    east: -73.0,
-  };
+  const bounds = L.latLngBounds(
+    [19.0, -86.2],
+    [24.2, -73.0]
+  );
 
-  const map = new google.maps.Map(mapEl, {
-    center: { lat, lng },
-    zoom: 14,
+  const map = L.map(mapEl, {
     minZoom: 6,
-    restriction: { latLngBounds: CUBA_BOUNDS, strictBounds: true },
-    mapId: mapEl.dataset.mapId || undefined,
-    mapTypeId: "hybrid",
-    tilt: 0,
-    heading: 0,
+    maxZoom: 19,
+    zoomControl: true,
+  }).setView([lat, lng], 14);
+  enableMiddleClickPan(map);
+
+  const streetsLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
   });
 
-  new google.maps.Marker({ position: { lat, lng }, map });
+  const satelliteLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      attribution:
+        'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+      maxZoom: 19,
+    }
+  );
+
+  streetsLayer.addTo(map);
+  L.control
+    .layers(
+      {
+        Mapa: streetsLayer,
+        Satelite: satelliteLayer,
+      },
+      {},
+      { collapsed: true }
+    )
+    .addTo(map);
+
+  map.setMaxBounds(bounds.pad(0.35));
+  L.marker([lat, lng]).addTo(map);
 
   const raw = mapEl.dataset.geojson || "";
   if (!raw) return;
   try {
     const geo = JSON.parse(raw);
     if (geo && geo.type === "Polygon" && geo.coordinates?.length) {
-      const path = geo.coordinates[0].map(([lngVal, latVal]) => ({ lat: latVal, lng: lngVal }));
-      new google.maps.Polygon({
-        paths: path,
-        strokeColor: "#6ee7b7",
-        strokeOpacity: 0.7,
-        strokeWeight: 2,
+      const latLngs = geo.coordinates[0].map(([lngVal, latVal]) => [latVal, lngVal]);
+      L.polygon(latLngs, {
+        color: "#6ee7b7",
+        opacity: 0.7,
+        weight: 2,
         fillColor: "#6ee7b7",
         fillOpacity: 0.18,
-        map,
-      });
+      }).addTo(map);
     } else if (geo && geo.type === "Point" && geo.coordinates?.length && geo.radius_m) {
-      new google.maps.Circle({
-        center: { lat: geo.coordinates[1], lng: geo.coordinates[0] },
+      L.circle([geo.coordinates[1], geo.coordinates[0]], {
         radius: geo.radius_m,
-        strokeColor: "#6ee7b7",
-        strokeOpacity: 0.7,
-        strokeWeight: 2,
+        color: "#6ee7b7",
+        opacity: 0.7,
+        weight: 2,
         fillColor: "#6ee7b7",
         fillOpacity: 0.18,
-        map,
-      });
+      }).addTo(map);
     }
   } catch (e) {
     // ignore invalid geojson
   }
-};
+}
+
+window.initDetailMap = initDetailMap;
+
+document.addEventListener("DOMContentLoaded", () => {
+  initDetailMap();
+});
