@@ -138,6 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const nickInput = document.getElementById("chatNick");
   const messageInput = document.getElementById("chatMessage");
   const container = document.getElementById("chatMessages");
+  let suppressSyntheticClicksUntil = 0;
 
   const openChat = () => {
     if (!widget) return;
@@ -197,6 +198,7 @@ document.addEventListener("DOMContentLoaded", () => {
       "touchend",
       (event) => {
         suppressClick = true;
+        suppressSyntheticClicksUntil = Date.now() + 400;
         event.preventDefault();
         handler(event);
         window.setTimeout(() => {
@@ -207,6 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     element.addEventListener("click", (event) => {
+      if (Date.now() < suppressSyntheticClicksUntil) return;
       if (suppressClick) return;
       handler(event);
     });
