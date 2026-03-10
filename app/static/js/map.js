@@ -1090,17 +1090,24 @@ async function initMap() {
       .setContent(`
         <div style="color:#111;max-width:240px;">
           <div style="font-weight:600;margin-bottom:8px;">Crear reporte aqui</div>
-          <button id="createReportBtn" style="background:#6ee7b7;border:none;padding:8px 10px;border-radius:6px;cursor:pointer;">Abrir formulario</button>
+          <button type="button" data-create-report-btn style="background:#6ee7b7;border:none;padding:8px 10px;border-radius:6px;cursor:pointer;">Abrir formulario</button>
         </div>
       `)
       .openOn(map);
 
     activePopup = popup;
 
-    setTimeout(() => {
-      const btn = document.getElementById("createReportBtn");
-      if (!btn) return;
-      btn.addEventListener("click", () => {
+    const bindCreateReportButton = () => {
+      const popupEl = popup.getElement();
+      if (!popupEl) return false;
+      L.DomEvent.disableClickPropagation(popupEl);
+      const btn = popupEl.querySelector("[data-create-report-btn]");
+      if (!btn) return false;
+      if (btn.dataset.bound === "1") return true;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", (clickEvent) => {
+        clickEvent.preventDefault();
+        clickEvent.stopPropagation();
         const zoom = map ? map.getZoom() : "";
         const zoomParam = Number.isFinite(zoom) ? `&zoom=${zoom}` : "";
         const targetUrl = `${newUrl}?lat=${lat}&lng=${lng}${zoomParam}`;
@@ -1110,7 +1117,12 @@ async function initMap() {
           window.location.href = targetUrl;
         }
       });
-    }, 0);
+      return true;
+    };
+
+    if (!bindCreateReportButton()) {
+      requestAnimationFrame(bindCreateReportButton);
+    }
   });
 
   if (recentTimer) {

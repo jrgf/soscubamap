@@ -728,7 +728,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const form = document.querySelector(".form-grid");
   const submit = form?.querySelector('button[type="submit"]');
   if (form && submit) {
-    form.addEventListener("submit", () => {
+    form.addEventListener("submit", (event) => {
+      if (event.defaultPrevented) return;
       submit.disabled = true;
       submit.dataset.loading = "true";
       submit.textContent = "Enviando...";
