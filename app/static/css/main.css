@@ -415,6 +415,9 @@ h3 {
   z-index: 950;
   display: grid;
   gap: 7px;
+  max-height: min(74vh, 560px);
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .connectivity-legend-overlay[hidden] {
@@ -624,8 +627,8 @@ h3 {
 .connectivity-province-log {
   display: grid;
   gap: 6px;
-  max-height: 180px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .connectivity-province-log-item {
@@ -3159,6 +3162,20 @@ textarea {
     width: 100%;
     height: auto;
     aspect-ratio: 1 / 1;
+  }
+
+  .map-wrap {
+    overflow: visible;
+  }
+
+  .connectivity-legend-overlay {
+    position: static;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    margin-top: 12px;
+    max-height: min(56vh, 520px);
+    z-index: auto;
   }
 
 }
