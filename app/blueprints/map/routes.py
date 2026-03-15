@@ -155,6 +155,9 @@ def dashboard():
         connectivity_refresh_seconds=current_app.config.get(
             "CONNECTIVITY_FRONTEND_REFRESH_SECONDS", 300
         ),
+        protest_refresh_seconds=current_app.config.get(
+            "PROTEST_FRONTEND_REFRESH_SECONDS", 300
+        ),
         map_provider_main=map_provider_main,
         google_maps_api_key=_google_maps_api_key(),
     )

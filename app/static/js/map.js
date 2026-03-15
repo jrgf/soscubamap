@@ -31,6 +31,28 @@ let connectivityProvinceRange;
 let connectivityProvinceChartMain;
 let connectivityProvinceChartPrev;
 let connectivityProvinceLog;
+let protestLayerGroup;
+let protestRefreshTimer;
+let protestRefreshSeconds = 300;
+let protestLastPayload = null;
+let protestTimelineStartDay = "";
+let protestTimelineEndDay = "";
+let protestSelectedDay = "";
+let protestSelectedStartDay = "";
+let protestSelectedEndDay = "";
+let protestSelectedMode = "day";
+let protestSelectedFeatureId = null;
+let protestOverlay;
+let protestTimelineSlider;
+let protestTimelineLabel;
+let protestDayInput;
+let protestStartInput;
+let protestEndInput;
+let protestApplyDayBtn;
+let protestApplyRangeBtn;
+let protestResetRangeBtn;
+let protestSummary;
+let protestDetailPanel;
 let activePopup;
 let recentTimer;
 let searchMarker;
@@ -66,6 +88,20 @@ const CONNECTIVITY_STATUS_LABELS = {
   critical: "Apagon o conectividad critica",
   unknown: "Sin datos",
 };
+const PROTEST_EVENT_LABELS = {
+  confirmed_protest: "Protesta confirmada",
+  probable_protest: "Protesta probable",
+  related_unrest: "Hecho relacionado",
+  unresolved_location: "Ubicacion aproximada",
+  context_only: "Contexto",
+};
+const PROTEST_EVENT_COLORS = {
+  confirmed_protest: "#c62828",
+  probable_protest: "#ef6c00",
+  related_unrest: "#f9a825",
+  unresolved_location: "#d97706",
+  context_only: "#64748b",
+};
 
 function canUseGoogleMutant(provider) {
   if (provider !== MAP_PROVIDER_GOOGLE) return false;
@@ -95,12 +131,17 @@ function buildMainBaseLayers(provider) {
       type: "roadmap",
       maxZoom: 20,
     });
+    const protestLayer = L.gridLayer.googleMutant({
+      type: "roadmap",
+      maxZoom: 20,
+    });
     return {
       useGoogle,
       streetsLayer: mapLayer,
       satelliteLayer,
       satelliteLabelsLayer: null,
       connectivityBaseLayer: connectivityLayer,
+      protestBaseLayer: protestLayer,
     };
   }
 
@@ -128,12 +169,17 @@ function buildMainBaseLayers(provider) {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,
   });
+  const protestBaseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  });
   return {
     useGoogle,
     streetsLayer,
     satelliteLayer,
     satelliteLabelsLayer,
     connectivityBaseLayer,
+    protestBaseLayer,
   };
 }
 
@@ -352,6 +398,11 @@ function setReportLegendVisible(visible) {
 function setConnectivityLegendVisible(visible) {
   if (!connectivityLegendOverlay) return;
   connectivityLegendOverlay.hidden = !visible;
+}
+
+function setProtestOverlayVisible(visible) {
+  if (!protestOverlay) return;
+  protestOverlay.hidden = !visible;
 }
 
 function setActiveConnectivityWindow(hours) {
@@ -797,7 +848,7 @@ function updateLegendCounts(posts) {
 
 window.handleNewReport = function (payload) {
   if (!payload || !map) return;
-  if (activeBaseMode === "connectivity") {
+  if (activeBaseMode === "connectivity" || activeBaseMode === "protests") {
     if (Array.isArray(allPosts) && payload.status === "approved") {
       allPosts.unshift(payload);
     }
@@ -1299,8 +1350,359 @@ function disableConnectivityMode() {
   renderConnectivityProvincePanel(null);
 }
 
+function clearProtestLayer() {
+  if (protestLayerGroup && map) {
+    map.removeLayer(protestLayerGroup);
+  }
+  protestLayerGroup = null;
+}
+
+function stopProtestPolling() {
+  if (!protestRefreshTimer) return;
+  clearInterval(protestRefreshTimer);
+  protestRefreshTimer = null;
+}
+
+function startProtestPolling() {
+  stopProtestPolling();
+  const intervalMs = Math.max(30, Number(protestRefreshSeconds) || 300) * 1000;
+  protestRefreshTimer = setInterval(() => {
+    refreshProtestLayer();
+  }, intervalMs);
+}
+
+function parseIsoDay(value) {
+  const raw = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [year, month, day] = raw.split("-").map((part) => Number(part));
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(date.getTime())) return null;
+  return raw;
+}
+
+function dayToDateUtc(dayString) {
+  const safe = parseIsoDay(dayString);
+  if (!safe) return null;
+  const [year, month, day] = safe.split("-").map((part) => Number(part));
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatDayUtc(dayString) {
+  const date = dayToDateUtc(dayString);
+  if (!date) return "N/D";
+  return new Intl.DateTimeFormat("es-ES", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function formatDayCuba(dayString) {
+  const date = dayToDateUtc(dayString);
+  if (!date) return "N/D";
+  return new Intl.DateTimeFormat("es-ES", {
+    timeZone: "America/Havana",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function dayOffset(startDay, endDay) {
+  const start = dayToDateUtc(startDay);
+  const end = dayToDateUtc(endDay);
+  if (!start || !end) return 0;
+  const diff = Math.round((end.getTime() - start.getTime()) / 86400000);
+  return Math.max(0, diff);
+}
+
+function dayByOffset(startDay, offset) {
+  const start = dayToDateUtc(startDay);
+  if (!start) return "";
+  const numericOffset = Math.max(0, Number(offset) || 0);
+  const date = new Date(start.getTime() + numericOffset * 86400000);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getProtestColor(feature) {
+  const eventType = feature?.properties?.event_type || "context_only";
+  return (
+    feature?.properties?.color ||
+    PROTEST_EVENT_COLORS[eventType] ||
+    PROTEST_EVENT_COLORS.context_only
+  );
+}
+
+function protestPopupHtml(feature) {
+  const props = feature?.properties || {};
+  const title = escapeHtml(props.title || "Evento");
+  const eventLabel = escapeHtml(PROTEST_EVENT_LABELS[props.event_type] || "Evento");
+  const confidence = Number(props.confidence_score);
+  const confidenceLabel = Number.isFinite(confidence) ? `${confidence.toFixed(1)}%` : "N/D";
+  const place = escapeHtml(
+    props.matched_feature_name ||
+      props.matched_place_text ||
+      props.matched_municipality ||
+      props.matched_province ||
+      "Ubicacion no resuelta"
+  );
+  const sourceName = escapeHtml(props.source_name || "RSS");
+  const sourceUrl = safeUrl(props.source_url || "");
+  const published = props.source_published_at_utc
+    ? escapeHtml(formatUtcAndCuba(props.source_published_at_utc))
+    : "N/D";
+  const sourceLinkHtml = sourceUrl
+    ? `<a href="${sourceUrl}" target="_blank" rel="noopener noreferrer">Ver publicacion original</a>`
+    : "<span>Sin enlace fuente</span>";
+  return `
+    <div style="color:#111;max-width:280px;">
+      <h3 style="margin:0 0 6px;">${title}</h3>
+      <div style="font-size:12px;margin-bottom:4px;"><strong>${eventLabel}</strong> · Confianza ${confidenceLabel}</div>
+      <div style="font-size:12px;margin-bottom:4px;">Lugar: ${place}</div>
+      <div style="font-size:12px;margin-bottom:4px;">Fecha: ${published}</div>
+      <div style="font-size:12px;margin-bottom:4px;">Fuente: ${sourceName}</div>
+      <div style="font-size:12px;">${sourceLinkHtml}</div>
+    </div>
+  `;
+}
+
+function renderProtestDetail(feature) {
+  if (!protestDetailPanel) return;
+  if (!feature) {
+    protestDetailPanel.innerHTML =
+      '<div class="protest-detail-empty">Haz clic en un evento para ver detalles y enlace original.</div>';
+    return;
+  }
+
+  const props = feature.properties || {};
+  const title = escapeHtml(props.title || "Evento");
+  const eventLabel = escapeHtml(PROTEST_EVENT_LABELS[props.event_type] || "Evento");
+  const confidence = Number(props.confidence_score);
+  const confidenceLabel = Number.isFinite(confidence) ? `${confidence.toFixed(1)}%` : "N/D";
+  const place = escapeHtml(
+    props.matched_feature_name ||
+      props.matched_place_text ||
+      props.matched_municipality ||
+      props.matched_province ||
+      "Ubicacion no resuelta"
+  );
+  const sourceName = escapeHtml(props.source_name || "RSS");
+  const sourceUrl = safeUrl(props.source_url || "");
+  const sourceUrlLabel = escapeHtml(props.source_url || "");
+  const published = props.source_published_at_utc
+    ? escapeHtml(formatUtcAndCuba(props.source_published_at_utc))
+    : "N/D";
+
+  const keywords = props.detected_keywords || {};
+  const keywordList = []
+    .concat(keywords.strong || [], keywords.context || [], keywords.weak || [])
+    .filter((value, index, self) => value && self.indexOf(value) === index)
+    .slice(0, 12)
+    .map((value) => escapeHtml(value))
+    .join(", ");
+
+  protestDetailPanel.innerHTML = `
+    <div class="protest-detail-title">${title}</div>
+    <div class="protest-detail-meta">Tipo: ${eventLabel} · Confianza: ${confidenceLabel}</div>
+    <div class="protest-detail-meta">Lugar detectado: ${place}</div>
+    <div class="protest-detail-meta">Fecha: ${published}</div>
+    <div class="protest-detail-meta">Fuente: ${sourceName}</div>
+    <div class="protest-detail-meta">Palabras clave: ${keywordList || "N/D"}</div>
+    ${
+      sourceUrl
+        ? `<a class="protest-detail-link" href="${sourceUrl}" target="_blank" rel="noopener noreferrer">${sourceUrlLabel}</a>`
+        : '<div class="protest-detail-meta">Sin enlace fuente</div>'
+    }
+  `;
+}
+
+function renderProtestSummary(payload) {
+  if (!protestSummary) return;
+  const total = Number(payload?.features_total || 0);
+  const mode = payload?.filters?.mode || "day";
+  const selectedDay = payload?.timeline?.selected_day_utc;
+  const selectedStart = payload?.timeline?.selected_start_day_utc;
+  const selectedEnd = payload?.timeline?.selected_end_day_utc;
+  if (mode === "range" && selectedStart && selectedEnd) {
+    protestSummary.textContent = `Eventos en rango UTC ${selectedStart} -> ${selectedEnd}: ${total}`;
+    return;
+  }
+  if (selectedDay) {
+    protestSummary.textContent = `Eventos del dia UTC ${selectedDay}: ${total}`;
+    return;
+  }
+  protestSummary.textContent = total
+    ? `Eventos visibles en la vista activa: ${total}`
+    : "Sin datos de protestas para la vista activa.";
+}
+
+function syncProtestTimelineControls(payload) {
+  const timeline = payload?.timeline || {};
+  protestTimelineStartDay = parseIsoDay(timeline.start_day_utc) || "";
+  protestTimelineEndDay = parseIsoDay(timeline.end_day_utc) || protestTimelineStartDay;
+  protestSelectedDay = parseIsoDay(timeline.selected_day_utc) || protestTimelineEndDay || protestTimelineStartDay;
+  protestSelectedStartDay = parseIsoDay(timeline.selected_start_day_utc) || "";
+  protestSelectedEndDay = parseIsoDay(timeline.selected_end_day_utc) || "";
+  protestSelectedMode = payload?.filters?.mode || "day";
+
+  if (protestTimelineSlider) {
+    const max = dayOffset(protestTimelineStartDay, protestTimelineEndDay);
+    protestTimelineSlider.min = "0";
+    protestTimelineSlider.max = String(max);
+    protestTimelineSlider.step = "1";
+    const selectedOffset = dayOffset(protestTimelineStartDay, protestSelectedDay || protestTimelineEndDay);
+    protestTimelineSlider.value = String(Math.min(max, Math.max(0, selectedOffset)));
+    protestTimelineSlider.disabled = protestSelectedMode === "range";
+  }
+
+  if (protestDayInput && protestSelectedDay) {
+    protestDayInput.value = protestSelectedDay;
+  }
+  if (protestStartInput) {
+    protestStartInput.value = protestSelectedStartDay || "";
+  }
+  if (protestEndInput) {
+    protestEndInput.value = protestSelectedEndDay || "";
+  }
+
+  if (protestTimelineLabel) {
+    if (protestSelectedMode === "range" && protestSelectedStartDay && protestSelectedEndDay) {
+      protestTimelineLabel.textContent = `Rango UTC ${formatDayUtc(protestSelectedStartDay)} -> ${formatDayUtc(
+        protestSelectedEndDay
+      )} (Cuba ${formatDayCuba(protestSelectedStartDay)} -> ${formatDayCuba(protestSelectedEndDay)})`;
+    } else if (protestSelectedDay) {
+      protestTimelineLabel.textContent = `Dia seleccionado UTC ${formatDayUtc(
+        protestSelectedDay
+      )} (Cuba ${formatDayCuba(protestSelectedDay)})`;
+    } else {
+      protestTimelineLabel.textContent = "Sin datos historicos.";
+    }
+  }
+}
+
+function renderProtestData(payload) {
+  if (!map) return;
+  clearProtestLayer();
+  const features = Array.isArray(payload?.features) ? payload.features : [];
+  if (!features.length) {
+    renderProtestDetail(null);
+    return;
+  }
+
+  protestLayerGroup = L.layerGroup();
+  let selectedFeature = null;
+  features.forEach((feature) => {
+    const coords = feature?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length < 2) return;
+    const lat = Number(coords[1]);
+    const lng = Number(coords[0]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const color = getProtestColor(feature);
+    const featureId = Number(feature?.properties?.id);
+    const isSelected = Number.isFinite(featureId) && featureId === protestSelectedFeatureId;
+    const marker = L.circleMarker([lat, lng], {
+      radius: isSelected ? 8 : 6,
+      color: "#0f172a",
+      weight: isSelected ? 2 : 1.4,
+      fillColor: color,
+      fillOpacity: 0.8,
+    });
+    marker.bindTooltip(
+      `${feature?.properties?.title || "Evento"} · ${
+        PROTEST_EVENT_LABELS[feature?.properties?.event_type] || "Evento"
+      }`,
+      {
+        direction: "top",
+        sticky: true,
+      }
+    );
+    marker.bindPopup(protestPopupHtml(feature), { maxWidth: 320 });
+    marker.on("click", () => {
+      protestSelectedFeatureId = Number(feature?.properties?.id) || null;
+      renderProtestDetail(feature);
+    });
+    marker.addTo(protestLayerGroup);
+    if (isSelected) {
+      selectedFeature = feature;
+    }
+  });
+  protestLayerGroup.addTo(map);
+
+  if (selectedFeature) {
+    renderProtestDetail(selectedFeature);
+  } else {
+    protestSelectedFeatureId = null;
+    renderProtestDetail(null);
+  }
+}
+
+async function fetchProtestData() {
+  const params = new URLSearchParams();
+  if (protestSelectedMode === "range" && protestSelectedStartDay && protestSelectedEndDay) {
+    params.set("start", protestSelectedStartDay);
+    params.set("end", protestSelectedEndDay);
+  } else {
+    const day = parseIsoDay(protestSelectedDay) || "";
+    if (day) params.set("day", day);
+  }
+  const url = params.toString() ? `/api/protests/geojson?${params}` : "/api/protests/geojson";
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error("No se pudo cargar la capa de protestas");
+  return await response.json();
+}
+
+async function refreshProtestLayer() {
+  if (activeBaseMode !== "protests") return;
+  try {
+    const payload = await fetchProtestData();
+    protestLastPayload = payload;
+    syncProtestTimelineControls(payload);
+    renderProtestSummary(payload);
+    renderProtestData(payload);
+  } catch (err) {
+    if (protestSummary) {
+      protestSummary.textContent = "No fue posible actualizar la capa Protestas.";
+    }
+    renderProtestDetail(null);
+    clearProtestLayer();
+  }
+}
+
+async function enableProtestMode() {
+  activeBaseMode = "protests";
+  clearMarkers();
+  closeActivePopup();
+  setMapHintVisible(false);
+  setReportLegendVisible(false);
+  setConnectivityLegendVisible(false);
+  setProtestOverlayVisible(true);
+  await refreshProtestLayer();
+  startProtestPolling();
+}
+
+function disableProtestMode() {
+  if (activeBaseMode !== "protests") return;
+  activeBaseMode = "map";
+  stopProtestPolling();
+  clearProtestLayer();
+  protestLastPayload = null;
+  protestSelectedFeatureId = null;
+  protestSelectedMode = "day";
+  protestSelectedStartDay = "";
+  protestSelectedEndDay = "";
+  setProtestOverlayVisible(false);
+  setReportLegendVisible(true);
+  setMapHintVisible(true);
+  renderProtestDetail(null);
+}
+
 async function applyFilters() {
-  if (activeBaseMode === "connectivity") {
+  if (activeBaseMode === "connectivity" || activeBaseMode === "protests") {
     clearMarkers();
     updateLegendCounts(allPosts);
     return;
@@ -1691,6 +2093,7 @@ async function initMap() {
 
   isAdmin = mapEl.dataset.isAdmin === "1";
   connectivityRefreshSeconds = Number(mapEl.dataset.connectivityRefreshSeconds || 300);
+  protestRefreshSeconds = Number(mapEl.dataset.protestRefreshSeconds || 300);
   const preferredProvider = (mapEl.dataset.mapProvider || MAP_PROVIDER_LEAFLET).toLowerCase();
   mapHintElement = document.getElementById("mapHint");
   reportLegendSection = document.getElementById("reportLegendSection");
@@ -1713,8 +2116,29 @@ async function initMap() {
   connectivityWindowButtons = Array.from(
     document.querySelectorAll("[data-connectivity-window-hours]")
   );
+  protestOverlay = document.getElementById("protestOverlay");
+  protestTimelineSlider = document.getElementById("protestTimelineSlider");
+  protestTimelineLabel = document.getElementById("protestTimelineLabel");
+  protestDayInput = document.getElementById("protestDayInput");
+  protestStartInput = document.getElementById("protestStartInput");
+  protestEndInput = document.getElementById("protestEndInput");
+  protestApplyDayBtn = document.getElementById("protestApplyDayBtn");
+  protestApplyRangeBtn = document.getElementById("protestApplyRangeBtn");
+  protestResetRangeBtn = document.getElementById("protestResetRangeBtn");
+  protestSummary = document.getElementById("protestSummary");
+  protestDetailPanel = document.getElementById("protestDetailPanel");
   setActiveConnectivityWindow(connectivityWindowHours);
   renderConnectivityProvincePanel(null);
+  renderProtestDetail(null);
+  setProtestOverlayVisible(false);
+
+  const nowUtc = new Date();
+  const currentDayUtc = `${nowUtc.getUTCFullYear()}-${String(nowUtc.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(nowUtc.getUTCDate()).padStart(2, "0")}`;
+  protestSelectedDay = currentDayUtc;
+  if (protestDayInput) protestDayInput.value = currentDayUtc;
 
   connectivityWindowButtons.forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1730,6 +2154,73 @@ async function initMap() {
     });
   });
 
+  if (protestTimelineSlider) {
+    protestTimelineSlider.addEventListener("change", async () => {
+      if (!protestTimelineStartDay) return;
+      const nextDay = dayByOffset(protestTimelineStartDay, protestTimelineSlider.value);
+      if (!nextDay) return;
+      protestSelectedMode = "day";
+      protestSelectedStartDay = "";
+      protestSelectedEndDay = "";
+      protestSelectedDay = nextDay;
+      if (protestDayInput) protestDayInput.value = nextDay;
+      if (activeBaseMode === "protests") {
+        await refreshProtestLayer();
+      } else if (protestTimelineLabel) {
+        protestTimelineLabel.textContent = `Dia seleccionado UTC ${formatDayUtc(
+          nextDay
+        )} (Cuba ${formatDayCuba(nextDay)})`;
+      }
+    });
+  }
+
+  if (protestApplyDayBtn) {
+    protestApplyDayBtn.addEventListener("click", async () => {
+      const nextDay = parseIsoDay(protestDayInput?.value);
+      if (!nextDay) return;
+      protestSelectedMode = "day";
+      protestSelectedStartDay = "";
+      protestSelectedEndDay = "";
+      protestSelectedDay = nextDay;
+      if (activeBaseMode === "protests") {
+        await refreshProtestLayer();
+      }
+    });
+  }
+
+  if (protestApplyRangeBtn) {
+    protestApplyRangeBtn.addEventListener("click", async () => {
+      const start = parseIsoDay(protestStartInput?.value);
+      const end = parseIsoDay(protestEndInput?.value);
+      if (!start || !end) return;
+      protestSelectedMode = "range";
+      protestSelectedStartDay = start;
+      protestSelectedEndDay = end;
+      if (activeBaseMode === "protests") {
+        await refreshProtestLayer();
+      }
+    });
+  }
+
+  if (protestResetRangeBtn) {
+    protestResetRangeBtn.addEventListener("click", async () => {
+      protestSelectedMode = "day";
+      protestSelectedStartDay = "";
+      protestSelectedEndDay = "";
+      protestSelectedDay = currentDayUtc;
+      if (protestDayInput) protestDayInput.value = currentDayUtc;
+      if (protestStartInput) protestStartInput.value = "";
+      if (protestEndInput) protestEndInput.value = "";
+      if (activeBaseMode === "protests") {
+        await refreshProtestLayer();
+      } else if (protestTimelineLabel) {
+        protestTimelineLabel.textContent = `Dia seleccionado UTC ${formatDayUtc(
+          currentDayUtc
+        )} (Cuba ${formatDayCuba(currentDayUtc)})`;
+      }
+    });
+  }
+
   map = L.map(mapEl, {
     zoomControl: true,
     minZoom: 4,
@@ -1741,6 +2232,7 @@ async function initMap() {
   const satelliteLayer = layerSet.satelliteLayer;
   const satelliteLabelsLayer = layerSet.satelliteLabelsLayer;
   const connectivityBaseLayer = layerSet.connectivityBaseLayer;
+  const protestBaseLayer = layerSet.protestBaseLayer;
 
   streetsLayer.addTo(map);
   L.control
@@ -1749,6 +2241,7 @@ async function initMap() {
         Mapa: streetsLayer,
         Satelite: satelliteLayer,
         Conectividad: connectivityBaseLayer,
+        Protestas: protestBaseLayer,
       },
       {},
       { collapsed: true }
@@ -1757,9 +2250,13 @@ async function initMap() {
   setMapHintVisible(true);
   setReportLegendVisible(true);
   setConnectivityLegendVisible(false);
+  setProtestOverlayVisible(false);
 
   map.on("baselayerchange", (event) => {
     if (event.layer === connectivityBaseLayer) {
+      if (activeBaseMode === "protests") {
+        disableProtestMode();
+      }
       if (satelliteLabelsLayer && map.hasLayer(satelliteLabelsLayer)) {
         map.removeLayer(satelliteLabelsLayer);
       }
@@ -1767,8 +2264,22 @@ async function initMap() {
       return;
     }
 
+    if (event.layer === protestBaseLayer) {
+      if (activeBaseMode === "connectivity") {
+        disableConnectivityMode();
+      }
+      if (satelliteLabelsLayer && map.hasLayer(satelliteLabelsLayer)) {
+        map.removeLayer(satelliteLabelsLayer);
+      }
+      enableProtestMode();
+      return;
+    }
+
     if (activeBaseMode === "connectivity") {
       disableConnectivityMode();
+    }
+    if (activeBaseMode === "protests") {
+      disableProtestMode();
     }
 
     activeBaseMode = event.layer === satelliteLayer ? "satellite" : "map";
@@ -1843,7 +2354,7 @@ async function initMap() {
   }
 
   map.on("click", (event) => {
-    if (activeBaseMode === "connectivity") {
+    if (activeBaseMode === "connectivity" || activeBaseMode === "protests") {
       closeActivePopup();
       return;
     }

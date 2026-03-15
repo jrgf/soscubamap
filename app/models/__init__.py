@@ -20,6 +20,8 @@ from .donation_log import DonationLog
 from .connectivity_ingestion_run import ConnectivityIngestionRun
 from .connectivity_snapshot import ConnectivitySnapshot
 from .connectivity_province_status import ConnectivityProvinceStatus
+from .protest_ingestion_run import ProtestIngestionRun
+from .protest_event import ProtestEvent
 
 __all__ = [
     "User",
@@ -45,4 +47,6 @@ __all__ = [
     "ConnectivityIngestionRun",
     "ConnectivitySnapshot",
     "ConnectivityProvinceStatus",
+    "ProtestIngestionRun",
+    "ProtestEvent",
 ]

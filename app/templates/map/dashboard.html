@@ -99,6 +99,7 @@
     data-new-url="{{ url_for('map.new_post') }}"
     data-is-admin="{{ 1 if current_user.is_authenticated and current_user.has_role('administrador') else 0 }}"
     data-connectivity-refresh-seconds="{{ connectivity_refresh_seconds }}"
+    data-protest-refresh-seconds="{{ protest_refresh_seconds }}"
     data-map-provider="{{ map_provider_main }}"
     data-allow-zoom="1"
   >
@@ -176,6 +177,45 @@
     {% if current_user.is_authenticated and current_user.has_role('administrador') %}
       <div class="connectivity-source-credit">Hecho con tecnología de Cloudflare Radar</div>
     {% endif %}
+  </div>
+  <div id="protestOverlay" class="protest-overlay" hidden>
+    <div class="protest-title">Protestas</div>
+    <div class="protest-subtitle">Eventos detectados en publicaciones RSS con enlace a fuente original.</div>
+    <div class="protest-timeline-wrap">
+      <label for="protestTimelineSlider" class="protest-control-label">Linea de tiempo (UTC)</label>
+      <input id="protestTimelineSlider" type="range" min="0" max="0" step="1" value="0" />
+      <div id="protestTimelineLabel" class="protest-timeline-label">Sin datos historicos.</div>
+    </div>
+    <div class="protest-date-controls">
+      <label>
+        Dia UTC
+        <input id="protestDayInput" type="date" />
+      </label>
+      <button type="button" id="protestApplyDayBtn" class="protest-btn">Ver dia</button>
+    </div>
+    <div class="protest-range-controls">
+      <label>
+        Inicio UTC
+        <input id="protestStartInput" type="date" />
+      </label>
+      <label>
+        Fin UTC
+        <input id="protestEndInput" type="date" />
+      </label>
+      <button type="button" id="protestApplyRangeBtn" class="protest-btn">Ver rango</button>
+      <button type="button" id="protestResetRangeBtn" class="protest-btn protest-btn-muted">Hoy</button>
+    </div>
+    <div class="protest-legend">
+      <div class="protest-legend-item"><span class="dot dot-confirmed"></span><span>Confirmada</span></div>
+      <div class="protest-legend-item"><span class="dot dot-probable"></span><span>Probable</span></div>
+      <div class="protest-legend-item"><span class="dot dot-related"></span><span>Relacionada</span></div>
+      <div class="protest-legend-item"><span class="dot dot-unresolved"></span><span>Ubicacion aproximada</span></div>
+    </div>
+    <div id="protestSummary" class="protest-summary">Sin datos de protestas para la vista activa.</div>
+    <div id="protestDetailPanel" class="protest-detail-panel">
+      <div class="protest-detail-empty">Haz clic en un evento para ver detalles y enlace original.</div>
+    </div>
+    <div class="protest-source-credit">Cada evento mostrado enlaza su publicacion original para trazabilidad.</div>
   </div>
 </section>
 

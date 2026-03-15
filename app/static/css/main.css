@@ -640,6 +640,191 @@ h3 {
   font-size: 10px;
 }
 
+.protest-overlay {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: min(360px, calc(100% - 32px));
+  background: rgba(18, 13, 13, 0.95);
+  border: 1px solid rgba(255, 181, 152, 0.34);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  z-index: 955;
+  display: grid;
+  gap: 8px;
+  max-height: min(74vh, 620px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.protest-overlay[hidden] {
+  display: none !important;
+}
+
+.protest-title {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #ffe6dc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.protest-subtitle {
+  color: #ffc7b0;
+  font-size: 11px;
+}
+
+.protest-control-label {
+  color: #ffd7c7;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+.protest-timeline-wrap {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid rgba(255, 190, 165, 0.18);
+  padding-top: 8px;
+}
+
+.protest-timeline-wrap input[type="range"] {
+  width: 100%;
+}
+
+.protest-timeline-label {
+  color: #ffe0d2;
+  font-size: 11px;
+}
+
+.protest-date-controls,
+.protest-range-controls {
+  display: grid;
+  gap: 6px;
+}
+
+.protest-date-controls label,
+.protest-range-controls label {
+  color: #ffd7c7;
+  font-size: 11px;
+  display: grid;
+  gap: 4px;
+}
+
+.protest-date-controls input,
+.protest-range-controls input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 197, 173, 0.34);
+  border-radius: 6px;
+  color: #fff0e9;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.protest-btn {
+  border: 1px solid rgba(255, 182, 158, 0.5);
+  background: rgba(255, 120, 86, 0.14);
+  color: #ffe6dc;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.protest-btn:hover {
+  border-color: rgba(255, 182, 158, 0.82);
+}
+
+.protest-btn-muted {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.protest-legend {
+  border-top: 1px solid rgba(255, 190, 165, 0.18);
+  padding-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.protest-legend-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #fff0e9;
+}
+
+.protest-legend-item .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.protest-legend-item .dot-confirmed {
+  background: #c62828;
+}
+
+.protest-legend-item .dot-probable {
+  background: #ef6c00;
+}
+
+.protest-legend-item .dot-related {
+  background: #f9a825;
+}
+
+.protest-legend-item .dot-unresolved {
+  background: #d97706;
+}
+
+.protest-summary {
+  border-top: 1px solid rgba(255, 190, 165, 0.18);
+  padding-top: 8px;
+  color: #ffd5c5;
+  font-size: 11px;
+}
+
+.protest-detail-panel {
+  border: 1px solid rgba(255, 190, 165, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+}
+
+.protest-detail-empty {
+  color: #ffc9b5;
+  font-size: 11px;
+}
+
+.protest-detail-title {
+  color: #fff0e9;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.protest-detail-meta {
+  color: #ffd4c3;
+  font-size: 11px;
+}
+
+.protest-detail-link {
+  color: #ffb998;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.protest-source-credit {
+  color: #ffb998;
+  font-size: 11px;
+}
+
 .pin-icon {
   width: 34px;
   height: 34px;
@@ -3165,6 +3350,16 @@ textarea {
     width: 100%;
     margin-top: 12px;
     max-height: min(56vh, 520px);
+    z-index: auto;
+  }
+
+  .protest-overlay {
+    position: static;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    margin-top: 12px;
+    max-height: min(56vh, 540px);
     z-index: auto;
   }
 

@@ -4,7 +4,7 @@ import json
 import os
 import secrets
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy.exc import IntegrityError
 from flask_login import current_user
 import requests
@@ -36,6 +36,8 @@ from app.services.vote_identity import get_voter_hash
 from app.models.connectivity_snapshot import ConnectivitySnapshot
 from app.models.connectivity_ingestion_run import ConnectivityIngestionRun
 from app.models.connectivity_province_status import ConnectivityProvinceStatus
+from app.models.protest_event import ProtestEvent
+from app.models.protest_ingestion_run import ProtestIngestionRun
 from app.services.connectivity import (
     STATUS_CRITICAL,
     STATUS_COLORS,
@@ -55,6 +57,10 @@ from app.services.connectivity_geo import (
 )
 from app.services.geo_lookup import list_provinces
 from app.services.cuba_locations import PROVINCES
+from app.services.protests import (
+    get_frontend_refresh_seconds as protest_frontend_refresh_seconds,
+    get_min_confidence_to_show as protest_min_confidence_to_show,
+)
 
 from app.models.post import Post
 from sqlalchemy.orm import selectinload
@@ -647,6 +653,115 @@ def _parse_connectivity_window_hours():
     return 24
 
 
+def _parse_iso_day(raw_value):
+    text = str(raw_value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def _day_to_str(value):
+    if isinstance(value, date):
+        return value.isoformat()
+    return None
+
+
+def _parse_protest_filters():
+    today_utc = datetime.utcnow().date()
+    mode = "day"
+
+    day_param = _parse_iso_day(request.args.get("day"))
+    start_param = _parse_iso_day(request.args.get("start"))
+    end_param = _parse_iso_day(request.args.get("end"))
+
+    if start_param and end_param:
+        if end_param < start_param:
+            start_param, end_param = end_param, start_param
+        mode = "range"
+        return {
+            "mode": mode,
+            "day": None,
+            "start": start_param,
+            "end": end_param,
+        }
+
+    return {
+        "mode": mode,
+        "day": day_param or today_utc,
+        "start": None,
+        "end": None,
+    }
+
+
+def _protest_event_color(event_type, confidence):
+    event_key = str(event_type or "").strip().lower()
+    score = to_float(confidence)
+    if event_key == "confirmed_protest":
+        return "#c62828"
+    if event_key == "probable_protest":
+        return "#ef6c00"
+    if event_key == "related_unrest":
+        return "#f9a825"
+    if event_key == "unresolved_location":
+        return "#d97706"
+    if score is not None and score >= 70:
+        return "#c62828"
+    if score is not None and score >= 50:
+        return "#ef6c00"
+    if score is not None and score >= 35:
+        return "#f9a825"
+    return "#64748b"
+
+
+def _safe_keywords_json(raw_json):
+    if not raw_json:
+        return {}
+    try:
+        parsed = json.loads(raw_json)
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _build_protest_feature(row):
+    if row.latitude is None or row.longitude is None:
+        return None
+    published_at_utc = row.source_published_at_utc.isoformat() + "Z" if row.source_published_at_utc else None
+    confidence = to_float(row.confidence_score)
+    return {
+        "type": "Feature",
+        "geometry": {
+            "type": "Point",
+            "coordinates": [float(row.longitude), float(row.latitude)],
+        },
+        "properties": {
+            "id": row.id,
+            "title": row.raw_title,
+            "event_type": row.event_type,
+            "confidence_score": confidence,
+            "color": _protest_event_color(row.event_type, confidence),
+            "source_feed": row.source_feed,
+            "source_name": row.source_name,
+            "source_platform": row.source_platform,
+            "source_url": row.source_url,
+            "source_published_at_utc": published_at_utc,
+            "transparency_note": row.transparency_note,
+            "matched_place_text": row.matched_place_text,
+            "matched_feature_type": row.matched_feature_type,
+            "matched_feature_name": row.matched_feature_name,
+            "matched_province": row.matched_province,
+            "matched_municipality": row.matched_municipality,
+            "matched_locality": row.matched_locality,
+            "location_precision": row.location_precision,
+            "detected_keywords": _safe_keywords_json(row.detected_keywords_json),
+            "review_status": row.review_status,
+        },
+    }
+
+
 @api_bp.route("/health")
 def health():
     return jsonify({"status": "ok"})
@@ -1088,6 +1203,249 @@ def connectivity_debug():
         diagnostics["cloudflare_probe"] = _cloudflare_probe()
 
     return jsonify(diagnostics)
+
+
+@api_bp.route("/protests/geojson")
+@limiter.limit("120/minute")
+def protests_geojson():
+    now = datetime.utcnow()
+    today_utc = now.date()
+    filters = _parse_protest_filters()
+    mode = filters["mode"]
+
+    province = (request.args.get("province") or "").strip()
+    municipality = (request.args.get("municipality") or "").strip()
+    source_name = (request.args.get("source") or "").strip()
+
+    min_conf_raw = (request.args.get("min_confidence") or "").strip()
+    min_conf_default = protest_min_confidence_to_show()
+    try:
+        min_confidence = max(0.0, min(100.0, float(min_conf_raw))) if min_conf_raw else min_conf_default
+    except Exception:
+        min_confidence = min_conf_default
+
+    include_hidden = _is_admin_user() and _truthy_param(request.args.get("include_hidden"))
+
+    base_query = ProtestEvent.query
+    if not include_hidden:
+        base_query = base_query.filter(ProtestEvent.visible_on_map.is_(True))
+    base_query = base_query.filter(
+        ProtestEvent.source_url.isnot(None),
+        ProtestEvent.source_url != "",
+    )
+    base_query = base_query.filter(ProtestEvent.confidence_score >= min_confidence)
+
+    if province:
+        base_query = base_query.filter(ProtestEvent.matched_province == province)
+    if municipality:
+        base_query = base_query.filter(ProtestEvent.matched_municipality == municipality)
+    if source_name:
+        base_query = base_query.filter(ProtestEvent.source_name == source_name)
+
+    timeline_start_day = db.session.query(func.min(ProtestEvent.published_day_utc)).scalar()
+    if timeline_start_day is None:
+        first_run_started = db.session.query(func.min(ProtestIngestionRun.started_at_utc)).scalar()
+        if first_run_started:
+            timeline_start_day = first_run_started.date()
+    timeline_end_day = today_utc
+    if timeline_start_day is None:
+        timeline_start_day = today_utc
+
+    if mode == "range":
+        start_day = filters["start"]
+        end_day = filters["end"]
+        start_dt = datetime.combine(start_day, datetime.min.time())
+        end_dt = datetime.combine(end_day + timedelta(days=1), datetime.min.time())
+        scoped_query = base_query.filter(
+            ProtestEvent.source_published_at_utc >= start_dt,
+            ProtestEvent.source_published_at_utc < end_dt,
+        )
+    else:
+        selected_day = filters["day"]
+        start_dt = datetime.combine(selected_day, datetime.min.time())
+        end_dt = datetime.combine(selected_day + timedelta(days=1), datetime.min.time())
+        scoped_query = base_query.filter(
+            ProtestEvent.source_published_at_utc >= start_dt,
+            ProtestEvent.source_published_at_utc < end_dt,
+        )
+
+    rows = (
+        scoped_query.order_by(ProtestEvent.source_published_at_utc.asc(), ProtestEvent.id.asc())
+        .limit(5000)
+        .all()
+    )
+
+    feature_rows = []
+    for row in rows:
+        feature = _build_protest_feature(row)
+        if feature:
+            feature_rows.append(feature)
+
+    day_counts_rows = (
+        base_query.with_entities(
+            ProtestEvent.published_day_utc.label("day"),
+            func.count(ProtestEvent.id).label("count"),
+        )
+        .group_by(ProtestEvent.published_day_utc)
+        .order_by(ProtestEvent.published_day_utc.asc())
+        .all()
+    )
+    day_counts = [
+        {
+            "day": _day_to_str(item.day),
+            "count": int(item.count or 0),
+        }
+        for item in day_counts_rows
+        if item.day is not None
+    ]
+
+    latest_run = (
+        ProtestIngestionRun.query.order_by(
+            ProtestIngestionRun.started_at_utc.desc(),
+            ProtestIngestionRun.id.desc(),
+        )
+        .limit(1)
+        .first()
+    )
+
+    payload = {
+        "type": "FeatureCollection",
+        "features": feature_rows,
+        "events_total": len(rows),
+        "features_total": len(feature_rows),
+        "filters": {
+            "mode": mode,
+            "min_confidence": min_confidence,
+            "province": province or None,
+            "municipality": municipality or None,
+            "source": source_name or None,
+            "include_hidden": include_hidden,
+        },
+        "timeline": {
+            "start_day_utc": _day_to_str(timeline_start_day),
+            "end_day_utc": _day_to_str(timeline_end_day),
+            "selected_day_utc": _day_to_str(filters.get("day")),
+            "selected_start_day_utc": _day_to_str(filters.get("start")),
+            "selected_end_day_utc": _day_to_str(filters.get("end")),
+            "day_counts": day_counts,
+        },
+        "range": {
+            "start_utc": start_dt.isoformat() + "Z",
+            "end_utc": end_dt.isoformat() + "Z",
+        },
+        "source": {
+            "name": "RSS configurados",
+            "label": "Eventos con enlace a publicacion original",
+        },
+        "refresh_seconds": protest_frontend_refresh_seconds(),
+        "latest_ingestion": {
+            "id": latest_run.id if latest_run else None,
+            "status": latest_run.status if latest_run else None,
+            "started_at_utc": serialize_snapshot_time(latest_run.started_at_utc) if latest_run else None,
+            "finished_at_utc": serialize_snapshot_time(latest_run.finished_at_utc) if latest_run else None,
+        },
+    }
+    return jsonify(payload)
+
+
+@api_bp.route("/protests/debug")
+@limiter.limit("30/minute")
+def protests_debug():
+    if not _is_admin_user():
+        return jsonify({"error": "Acceso denegado"}), 403
+
+    total_events = db.session.query(func.count(ProtestEvent.id)).scalar() or 0
+    visible_events = (
+        db.session.query(func.count(ProtestEvent.id))
+        .filter(ProtestEvent.visible_on_map.is_(True))
+        .scalar()
+        or 0
+    )
+    with_coords = (
+        db.session.query(func.count(ProtestEvent.id))
+        .filter(
+            ProtestEvent.latitude.isnot(None),
+            ProtestEvent.longitude.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+    without_source = (
+        db.session.query(func.count(ProtestEvent.id))
+        .filter((ProtestEvent.source_url.is_(None)) | (ProtestEvent.source_url == ""))
+        .scalar()
+        or 0
+    )
+
+    latest_runs = (
+        ProtestIngestionRun.query.order_by(
+            ProtestIngestionRun.started_at_utc.desc(),
+            ProtestIngestionRun.id.desc(),
+        )
+        .limit(10)
+        .all()
+    )
+
+    runs_payload = []
+    for run in latest_runs:
+        payload_preview = None
+        if run.payload_json:
+            try:
+                payload_obj = json.loads(run.payload_json)
+                payload_preview = {
+                    "feeds": list((payload_obj.get("feeds") or {}).keys())[:6],
+                    "errors": (payload_obj.get("errors") or [])[:6],
+                }
+            except Exception:
+                payload_preview = {"error": "payload_json invalido"}
+        runs_payload.append(
+            {
+                "id": run.id,
+                "status": run.status,
+                "started_at_utc": serialize_snapshot_time(run.started_at_utc),
+                "finished_at_utc": serialize_snapshot_time(run.finished_at_utc),
+                "feed_count": run.feed_count,
+                "fetched_items": run.fetched_items,
+                "parsed_items": run.parsed_items,
+                "stored_items": run.stored_items,
+                "updated_items": run.updated_items,
+                "deduped_items": run.deduped_items,
+                "hidden_items": run.hidden_items,
+                "error_message": (run.error_message or "")[:500] or None,
+                "payload_preview": payload_preview,
+            }
+        )
+
+    return jsonify(
+        {
+            "generated_at_utc": serialize_snapshot_time(datetime.utcnow()),
+            "config": {
+                "protest_rss_feeds": [
+                    item.strip()
+                    for item in str(current_app.config.get("PROTEST_RSS_FEEDS", "") or "").split(",")
+                    if item.strip()
+                ],
+                "protest_fetch_timeout_seconds": int(
+                    current_app.config.get("PROTEST_FETCH_TIMEOUT_SECONDS", 30)
+                ),
+                "protest_frontend_refresh_seconds": protest_frontend_refresh_seconds(),
+                "protest_min_confidence_to_show": protest_min_confidence_to_show(),
+                "protest_require_source_url": bool(
+                    current_app.config.get("PROTEST_REQUIRE_SOURCE_URL", True)
+                ),
+                "geojson_provinces_path": current_app.config.get("GEOJSON_PROVINCES_PATH"),
+                "geojson_municipalities_path": current_app.config.get("GEOJSON_MUNICIPALITIES_PATH"),
+                "geojson_localities_path": current_app.config.get("GEOJSON_LOCALITIES_PATH"),
+            },
+            "counts": {
+                "total_events": int(total_events),
+                "visible_events": int(visible_events),
+                "events_with_coords": int(with_coords),
+                "events_without_source": int(without_source),
+            },
+            "runs": runs_payload,
+        }
+    )
 
 
 @api_bp.route("/push/subscribe", methods=["POST"])
