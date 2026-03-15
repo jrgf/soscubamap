@@ -2864,6 +2864,77 @@ textarea {
   height: 240px !important;
 }
 
+.analytics-log-card {
+  height: auto;
+  min-height: 260px;
+}
+
+.analytics-log-summary {
+  color: #7fe7c0;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.analytics-log-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.analytics-log-item {
+  border: 1px solid rgba(110, 231, 183, 0.18);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(8, 14, 12, 0.72);
+}
+
+.analytics-log-item.ongoing {
+  border-color: rgba(198, 40, 40, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(198, 40, 40, 0.28);
+}
+
+.analytics-log-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.analytics-log-state {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fca5a5;
+}
+
+.analytics-log-item.closed .analytics-log-state {
+  color: #9ef5cc;
+}
+
+.analytics-log-duration {
+  font-size: 12px;
+  color: #c9f7db;
+}
+
+.analytics-log-item-body {
+  display: grid;
+  gap: 4px;
+  color: #c9f7db;
+  font-size: 13px;
+}
+
+.analytics-log-empty {
+  color: #9ca3af;
+  font-size: 13px;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  border-radius: 10px;
+  padding: 12px;
+}
+
 .analytics-notes {
   background: linear-gradient(135deg, #0b1215, #0b1715);
   border: 1px solid rgba(110, 231, 183, 0.18);

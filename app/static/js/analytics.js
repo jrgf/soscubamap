@@ -24,6 +24,26 @@ if (window.Chart) {
 
 const formatDateInput = (date) => date.toISOString().slice(0, 10);
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+const formatUtcDateTime = (value) => {
+  if (!value) return "N/D";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  const day = String(parsed.getUTCDate()).padStart(2, "0");
+  const month = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+  const year = parsed.getUTCFullYear();
+  const hours = String(parsed.getUTCHours()).padStart(2, "0");
+  const minutes = String(parsed.getUTCMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes} UTC`;
+};
+
 const getDateRange = () => {
   const end = new Date();
   const start = new Date();
@@ -175,6 +195,62 @@ const destroyChart = (id) => {
   }
 };
 
+const renderConnectivityOutageLog = (payload) => {
+  const summaryEl = document.getElementById("connectivityOutageSummary");
+  const listEl = document.getElementById("connectivityOutageLog");
+  if (!summaryEl || !listEl) return;
+
+  const outages = payload?.connectivity_outages || {};
+  const events = Array.isArray(outages.events) ? outages.events : [];
+  const total = Number.isFinite(Number(outages.total)) ? Number(outages.total) : events.length;
+  const ongoing = Number.isFinite(Number(outages.ongoing))
+    ? Number(outages.ongoing)
+    : events.filter((event) => event && event.ongoing).length;
+
+  summaryEl.textContent = `Eventos detectados: ${total} · En curso: ${ongoing}`;
+
+  if (!events.length) {
+    listEl.innerHTML = `<div class="analytics-log-empty">Sin apagones registrados en el rango seleccionado.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = events
+    .map((event) => {
+      const started = formatUtcDateTime(event.started_at_utc);
+      const ended = event.ended_at_utc ? formatUtcDateTime(event.ended_at_utc) : "En curso";
+      const duration =
+        event.duration_minutes === null || event.duration_minutes === undefined
+          ? "Duración: en curso"
+          : `Duración: ${event.duration_minutes} min`;
+      const province = event.province ? ` · ${escapeHtml(event.province)}` : "";
+      const startScore =
+        Number.isFinite(Number(event.score_at_start))
+          ? Number(event.score_at_start).toFixed(1)
+          : "N/D";
+      const endScore =
+        Number.isFinite(Number(event.score_at_end))
+          ? Number(event.score_at_end).toFixed(1)
+          : "N/D";
+      const statusClass = event.ongoing ? "ongoing" : "closed";
+      const statusLabel = event.ongoing ? "En curso" : "Finalizado";
+
+      return `
+        <div class="analytics-log-item ${statusClass}">
+          <div class="analytics-log-item-head">
+            <span class="analytics-log-state">${statusLabel}</span>
+            <span class="analytics-log-duration">${duration}</span>
+          </div>
+          <div class="analytics-log-item-body">
+            <div><strong>Inicio:</strong> ${escapeHtml(started)}${province}</div>
+            <div><strong>Fin:</strong> ${escapeHtml(ended)}</div>
+            <div><strong>Score inicio/fin:</strong> ${escapeHtml(startScore)}% / ${escapeHtml(endScore)}%</div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+};
+
 const renderCharts = (payload) => {
   destroyChart("reportsOverTime");
   destroyChart("moderationStatus");
@@ -273,6 +349,8 @@ const renderCharts = (payload) => {
     ["Pendientes", "Aprobadas", "Rechazadas"],
     [editStatus.pending || 0, editStatus.approved || 0, editStatus.rejected || 0]
   );
+
+  renderConnectivityOutageLog(payload);
 };
 
 const initFilters = () => {

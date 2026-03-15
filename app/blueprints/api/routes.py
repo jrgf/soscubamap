@@ -34,7 +34,9 @@ from app.models.vote_record import VoteRecord
 from app.services.vote_identity import get_voter_hash
 from app.models.connectivity_snapshot import ConnectivitySnapshot
 from app.models.connectivity_ingestion_run import ConnectivityIngestionRun
+from app.models.connectivity_province_status import ConnectivityProvinceStatus
 from app.services.connectivity import (
+    STATUS_CRITICAL,
     STATUS_COLORS,
     STATUS_LABELS,
     STATUS_UNKNOWN,
@@ -691,6 +693,115 @@ def _parse_date(value: str):
         return None
 
 
+def _build_connectivity_outage_events(start_dt, end_dt, province=""):
+    selected_province = (province or "").strip() or None
+
+    if selected_province:
+        base_query = db.session.query(
+            ConnectivitySnapshot.id.label("snapshot_id"),
+            ConnectivitySnapshot.observed_at_utc.label("observed_at_utc"),
+            ConnectivityProvinceStatus.status.label("status"),
+            ConnectivityProvinceStatus.score.label("score"),
+            ConnectivityProvinceStatus.province.label("province"),
+        ).join(
+            ConnectivityProvinceStatus,
+            ConnectivityProvinceStatus.snapshot_id == ConnectivitySnapshot.id,
+        ).filter(
+            ConnectivityProvinceStatus.province == selected_province,
+        )
+    else:
+        base_query = db.session.query(
+            ConnectivitySnapshot.id.label("snapshot_id"),
+            ConnectivitySnapshot.observed_at_utc.label("observed_at_utc"),
+            ConnectivitySnapshot.status.label("status"),
+            ConnectivitySnapshot.score.label("score"),
+        )
+
+    previous_point = (
+        base_query.filter(ConnectivitySnapshot.observed_at_utc < start_dt)
+        .order_by(ConnectivitySnapshot.observed_at_utc.desc(), ConnectivitySnapshot.id.desc())
+        .first()
+    )
+    points_in_range = (
+        base_query.filter(
+            ConnectivitySnapshot.observed_at_utc >= start_dt,
+            ConnectivitySnapshot.observed_at_utc <= end_dt,
+        )
+        .order_by(ConnectivitySnapshot.observed_at_utc.asc(), ConnectivitySnapshot.id.asc())
+        .all()
+    )
+
+    points = []
+    if previous_point:
+        points.append(previous_point)
+    points.extend(points_in_range)
+
+    if not points:
+        return {"events": [], "total": 0, "ongoing": 0}
+
+    def _is_critical(item):
+        return (getattr(item, "status", "") or "").strip().lower() == STATUS_CRITICAL
+
+    def _build_event_start(item):
+        start_raw = getattr(item, "observed_at_utc", None)
+        event = {
+            "started_at_utc": serialize_snapshot_time(start_raw),
+            "ended_at_utc": None,
+            "duration_minutes": None,
+            "ongoing": True,
+            "score_at_start": getattr(item, "score", None),
+            "score_at_end": None,
+            "start_snapshot_id": getattr(item, "snapshot_id", None),
+            "end_snapshot_id": None,
+            "province": getattr(item, "province", None) or selected_province,
+            "_start_dt": start_raw,
+        }
+        return event
+
+    events = []
+    open_event = None
+    prev = None
+    for point in points:
+        current_critical = _is_critical(point)
+        previous_critical = _is_critical(prev) if prev is not None else False
+
+        if current_critical and not previous_critical:
+            open_event = _build_event_start(point)
+        elif (not current_critical) and previous_critical and open_event is not None:
+            start_raw = open_event.get("_start_dt")
+            end_raw = getattr(point, "observed_at_utc", None)
+            duration_minutes = None
+            if start_raw and end_raw:
+                duration_minutes = max(int((end_raw - start_raw).total_seconds() // 60), 0)
+
+            open_event.update(
+                {
+                    "ended_at_utc": serialize_snapshot_time(end_raw),
+                    "duration_minutes": duration_minutes,
+                    "ongoing": False,
+                    "score_at_end": getattr(point, "score", None),
+                    "end_snapshot_id": getattr(point, "snapshot_id", None),
+                }
+            )
+            open_event.pop("_start_dt", None)
+            events.append(open_event)
+            open_event = None
+
+        prev = point
+
+    if open_event is not None:
+        open_event.pop("_start_dt", None)
+        events.append(open_event)
+
+    events = [event for event in events if event.get("started_at_utc")]
+    events.sort(key=lambda event: event.get("started_at_utc") or "", reverse=True)
+    return {
+        "events": events[:120],
+        "total": len(events),
+        "ongoing": len([event for event in events if event.get("ongoing")]),
+    }
+
+
 @api_bp.route("/v1/analytics")
 @limiter.limit("60/minute")
 def analytics_v1():
@@ -888,6 +999,7 @@ def analytics_v1():
         .all()
     )
     edit_status_map = {status: count for status, count in edit_status_query}
+    connectivity_outages = _build_connectivity_outage_events(start_dt, end_dt, province=province)
 
     return jsonify(
         {
@@ -916,6 +1028,7 @@ def analytics_v1():
                 "approved": edit_status_map.get("approved", 0),
                 "rejected": edit_status_map.get("rejected", 0),
             },
+            "connectivity_outages": connectivity_outages,
         }
     )
 
