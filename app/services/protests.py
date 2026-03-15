@@ -749,6 +749,22 @@ def _candidate_specificity(entry):
     return 0
 
 
+def _term_positions(normalized_text, term):
+    if not normalized_text or not term:
+        return []
+    pattern = rf"(?<!\w){re.escape(term)}(?!\w)"
+    return [match.start() for match in re.finditer(pattern, normalized_text)]
+
+
+def _first_sentence_end(normalized_text):
+    if not normalized_text:
+        return -1
+    match = re.search(r"[.!?;]", normalized_text)
+    if not match:
+        return -1
+    return match.start()
+
+
 def resolve_place(clean_text):
     normalized = _normalize_text(clean_text)
     if not normalized:
@@ -785,6 +801,7 @@ def resolve_place(clean_text):
     all_idx = gazetteer.get("all") or {}
     terms_sorted = gazetteer.get("terms_sorted") or []
     province_terms = gazetteer.get("province_terms") or set()
+    first_sentence_end = _first_sentence_end(normalized)
 
     context_provinces = set()
     for term in terms_sorted:
@@ -797,8 +814,10 @@ def resolve_place(clean_text):
     for term in terms_sorted:
         if term in GENERIC_PLACE_TERMS:
             continue
-        if not re.search(rf"(?<!\w){re.escape(term)}(?!\w)", normalized):
+        positions = _term_positions(normalized, term)
+        if not positions:
             continue
+        first_pos = positions[0]
         for entry in all_idx.get(term, []):
             province_norm = _normalize_text(entry.get("province"))
             score = _candidate_specificity(entry) + len(term) / 12.0
@@ -806,6 +825,13 @@ def resolve_place(clean_text):
                 score += 8.0
             if "," in normalized and term in normalized:
                 score += 1.0
+            # Prioriza menciones tempranas y de la primera frase.
+            score += max(0.0, 14.0 - (float(first_pos) / 16.0))
+            if first_sentence_end >= 0 and first_pos <= first_sentence_end:
+                score += 8.0
+            sentence_penalty = normalized[:first_pos].count(".") * 2.5
+            if sentence_penalty > 0:
+                score -= min(8.0, sentence_penalty)
             candidates.append((score, term, entry))
 
     if not candidates:
