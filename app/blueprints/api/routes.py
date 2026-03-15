@@ -3,6 +3,7 @@ import math
 import json
 import os
 import secrets
+import unicodedata
 from datetime import datetime, timedelta
 from sqlalchemy.exc import IntegrityError
 from flask_login import current_user
@@ -106,6 +107,22 @@ def _mask_secret(value):
     return f"{text[:4]}...{text[-4:]}"
 
 
+def _normalize_text_key(value):
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    normalized = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
+def _canonical_province_name(value):
+    key = _normalize_text_key(value)
+    if not key:
+        return ""
+    canonical_map = {_normalize_text_key(name): name for name in PROVINCES}
+    return canonical_map.get(key, str(value or "").strip())
+
+
 def _cf_api_token():
     return (current_app.config.get("CF_API_TOKEN") or os.getenv("CF_API_TOKEN") or "").strip()
 
@@ -119,6 +136,32 @@ def _connectivity_payload_summary(payload):
             "latest_main": None,
             "latest_previous": None,
             "latest_main_hourly": None,
+        }
+
+    provinces = payload.get("provinces")
+    if isinstance(provinces, dict):
+        province_summaries = {}
+        ok_count = 0
+        latest_points = []
+        for province, details in provinces.items():
+            province_payload = (details or {}).get("payload")
+            summary = _connectivity_payload_summary(province_payload)
+            province_summaries[province] = {
+                "main_points": summary.get("main_points", 0),
+                "latest_main_hourly": summary.get("latest_main_hourly"),
+            }
+            if summary.get("main_points"):
+                ok_count += 1
+            latest_main_hourly = summary.get("latest_main_hourly")
+            if latest_main_hourly and latest_main_hourly.get("timestamp_utc"):
+                latest_points.append(latest_main_hourly.get("timestamp_utc"))
+        return {
+            "parse_ok": True,
+            "mode": payload.get("mode") or "province_geoid_v1",
+            "province_count": len(provinces),
+            "provinces_with_data": ok_count,
+            "latest_hourly_timestamp_utc": max(latest_points) if latest_points else None,
+            "provinces": province_summaries,
         }
 
     main_points = extract_series_points(payload, "main")
@@ -169,37 +212,7 @@ def _latest_successful_connectivity_run():
     )
 
 
-def _build_http_requests_window_summary(window_hours=24):
-    try:
-        hours = int(window_hours)
-    except Exception:
-        hours = 24
-    hours = max(1, min(hours, 48))
-
-    run = _latest_successful_connectivity_run()
-    if not run or not run.payload_json:
-        return {
-            "available": False,
-            "reason": "No hay ingestas exitosas con payload.",
-            "window_hours": hours,
-            "series_main": [],
-            "series_previous_aligned": [],
-        }
-
-    try:
-        payload = json.loads(run.payload_json)
-    except Exception as exc:
-        return {
-            "available": False,
-            "reason": f"Payload de ingesta invalido: {exc}",
-            "window_hours": hours,
-            "source_run_id": run.id,
-            "source_started_at_utc": serialize_snapshot_time(run.started_at_utc),
-            "source_finished_at_utc": serialize_snapshot_time(run.finished_at_utc),
-            "series_main": [],
-            "series_previous_aligned": [],
-        }
-
+def _compute_window_summary_from_payload(payload, hours):
     main_points_all = extract_series_points(payload, "main")
     previous_points_all = extract_series_points(payload, "previous")
     if not main_points_all:
@@ -207,9 +220,6 @@ def _build_http_requests_window_summary(window_hours=24):
             "available": False,
             "reason": "La serie main no contiene puntos.",
             "window_hours": hours,
-            "source_run_id": run.id,
-            "source_started_at_utc": serialize_snapshot_time(run.started_at_utc),
-            "source_finished_at_utc": serialize_snapshot_time(run.finished_at_utc),
             "series_main": [],
             "series_previous_aligned": [],
         }
@@ -257,7 +267,7 @@ def _build_http_requests_window_summary(window_hours=24):
     min_main_value = min(main_values) if main_values else None
     avg_main_value = (sum(main_values) / len(main_values)) if main_values else None
 
-    score_method = "worst_from_main_peak_ratio_pct"
+    score_method = "blended_latest_avg_worst_from_main_peak_ratio_pct_v1"
     max_drop_from_peak_pct = None
     if (
         peak_main_value is not None
@@ -266,21 +276,41 @@ def _build_http_requests_window_summary(window_hours=24):
     ):
         max_drop_from_peak_pct = ((peak_main_value - min_main_value) / peak_main_value) * 100.0
 
+    score_latest_pct = None
+    score_avg_pct = None
     score_worst_pct = None
+    score_window_pct = None
     if min_main_value is not None and peak_main_value is not None:
         if peak_main_value > 0:
+            if latest_main_value is not None:
+                score_latest_pct = (latest_main_value / peak_main_value) * 100.0
+                score_latest_pct = max(0.0, min(score_latest_pct, 100.0))
+            if avg_main_value is not None:
+                score_avg_pct = (avg_main_value / peak_main_value) * 100.0
+                score_avg_pct = max(0.0, min(score_avg_pct, 100.0))
             score_worst_pct = (min_main_value / peak_main_value) * 100.0
             score_worst_pct = max(0.0, min(score_worst_pct, 100.0))
         elif peak_main_value == 0 and min_main_value == 0:
+            score_latest_pct = 0.0
+            score_avg_pct = 0.0
             score_worst_pct = 0.0
+
+    weighted_parts = []
+    if score_latest_pct is not None:
+        weighted_parts.append((score_latest_pct, 0.55))
+    if score_avg_pct is not None:
+        weighted_parts.append((score_avg_pct, 0.30))
+    if score_worst_pct is not None:
+        weighted_parts.append((score_worst_pct, 0.15))
+    if weighted_parts:
+        total_weight = sum(weight for _, weight in weighted_parts)
+        score_window_pct = sum(value * weight for value, weight in weighted_parts) / total_weight
+        score_window_pct = max(0.0, min(score_window_pct, 100.0))
 
     return {
         "available": bool(main_points),
         "window_hours": hours,
         "score_method": score_method,
-        "source_run_id": run.id,
-        "source_started_at_utc": serialize_snapshot_time(run.started_at_utc),
-        "source_finished_at_utc": serialize_snapshot_time(run.finished_at_utc),
         "latest_timestamp_utc": serialize_snapshot_time(main_points[-1].get("timestamp")) if main_points else None,
         "latest_main_value": latest_main_value,
         "latest_previous_value": latest_previous_value,
@@ -289,7 +319,10 @@ def _build_http_requests_window_summary(window_hours=24):
         "min_main_value": min_main_value,
         "avg_main_value": avg_main_value,
         "max_drop_from_peak_pct": max_drop_from_peak_pct,
+        "score_latest_pct": score_latest_pct,
+        "score_avg_pct": score_avg_pct,
         "score_worst_pct": score_worst_pct,
+        "score_window_pct": score_window_pct,
         "series_main": [
             point for point in (_serialize_timeseries_point(item) for item in main_points) if point
         ],
@@ -299,6 +332,203 @@ def _build_http_requests_window_summary(window_hours=24):
             if point
         ],
     }
+
+
+def _average_serialized_series(series_groups):
+    buckets = {}
+    for series in series_groups or []:
+        for point in series or []:
+            timestamp = point.get("timestamp_utc")
+            value = to_float(point.get("value"))
+            if not timestamp or value is None:
+                continue
+            buckets.setdefault(timestamp, []).append(value)
+    points = []
+    for timestamp in sorted(buckets.keys()):
+        values = buckets[timestamp]
+        points.append({"timestamp_utc": timestamp, "value": sum(values) / len(values)})
+    return points
+
+
+def _build_http_requests_window_summary(window_hours=24):
+    try:
+        hours = int(window_hours)
+    except Exception:
+        hours = 24
+    hours = max(1, min(hours, 48))
+
+    run = _latest_successful_connectivity_run()
+    if not run or not run.payload_json:
+        return {
+            "available": False,
+            "reason": "No hay ingestas exitosas con payload.",
+            "window_hours": hours,
+            "series_main": [],
+            "series_previous_aligned": [],
+        }
+
+    try:
+        payload = json.loads(run.payload_json)
+    except Exception as exc:
+        return {
+            "available": False,
+            "reason": f"Payload de ingesta invalido: {exc}",
+            "window_hours": hours,
+            "source_run_id": run.id,
+            "source_started_at_utc": serialize_snapshot_time(run.started_at_utc),
+            "source_finished_at_utc": serialize_snapshot_time(run.finished_at_utc),
+            "series_main": [],
+            "series_previous_aligned": [],
+        }
+
+    provinces = payload.get("provinces")
+    if isinstance(provinces, dict):
+        by_province = {}
+        for raw_province, details in provinces.items():
+            province_name = _canonical_province_name(raw_province)
+            province_payload = (details or {}).get("payload")
+            summary = _compute_window_summary_from_payload(province_payload, hours)
+            summary["geo_id"] = (details or {}).get("geo_id")
+            by_province[province_name] = summary
+
+        available_province_items = [
+            item for item in by_province.values() if item.get("available")
+        ]
+        if not available_province_items:
+            return {
+                "available": False,
+                "reason": "No hay series provinciales con datos.",
+                "window_hours": hours,
+                "source_run_id": run.id,
+                "source_started_at_utc": serialize_snapshot_time(run.started_at_utc),
+                "source_finished_at_utc": serialize_snapshot_time(run.finished_at_utc),
+                "series_main": [],
+                "series_previous_aligned": [],
+                "by_province": by_province,
+            }
+
+        main_series_avg = _average_serialized_series(
+            [item.get("series_main") for item in available_province_items]
+        )
+        prev_series_avg = _average_serialized_series(
+            [item.get("series_previous_aligned") for item in available_province_items]
+        )
+        main_values = [to_float(point.get("value")) for point in main_series_avg]
+        main_values = [value for value in main_values if value is not None]
+
+        latest_main_value = (
+            to_float(main_series_avg[-1].get("value")) if main_series_avg else None
+        )
+        latest_previous_value = (
+            to_float(prev_series_avg[-1].get("value")) if prev_series_avg else None
+        )
+        delta_pct = None
+        if (
+            latest_main_value is not None
+            and latest_previous_value is not None
+            and latest_previous_value > 0
+        ):
+            delta_pct = (
+                (latest_main_value - latest_previous_value) / latest_previous_value
+            ) * 100.0
+
+        peak_main_value = max(main_values) if main_values else None
+        min_main_value = min(main_values) if main_values else None
+        avg_main_value = (sum(main_values) / len(main_values)) if main_values else None
+
+        score_latest_pct = None
+        score_avg_pct = None
+        score_worst_pct = None
+        if min_main_value is not None and peak_main_value is not None:
+            if peak_main_value > 0:
+                if latest_main_value is not None:
+                    score_latest_pct = (latest_main_value / peak_main_value) * 100.0
+                if avg_main_value is not None:
+                    score_avg_pct = (avg_main_value / peak_main_value) * 100.0
+                score_worst_pct = (min_main_value / peak_main_value) * 100.0
+            elif peak_main_value == 0 and min_main_value == 0:
+                score_latest_pct = 0.0
+                score_avg_pct = 0.0
+                score_worst_pct = 0.0
+
+        score_latest_pct = (
+            max(0.0, min(score_latest_pct, 100.0))
+            if score_latest_pct is not None
+            else None
+        )
+        score_avg_pct = (
+            max(0.0, min(score_avg_pct, 100.0))
+            if score_avg_pct is not None
+            else None
+        )
+        score_worst_pct = (
+            max(0.0, min(score_worst_pct, 100.0))
+            if score_worst_pct is not None
+            else None
+        )
+        score_window_pct = _average_numeric(
+            [item.get("score_window_pct") for item in available_province_items]
+        )
+        if score_window_pct is None:
+            score_window_pct = _average_numeric(
+                [item.get("score_worst_pct") for item in available_province_items]
+            )
+
+        max_drop_from_peak_pct = None
+        if (
+            peak_main_value is not None
+            and min_main_value is not None
+            and peak_main_value > 0
+        ):
+            max_drop_from_peak_pct = (
+                (peak_main_value - min_main_value) / peak_main_value
+            ) * 100.0
+
+        latest_candidates = [
+            item.get("latest_timestamp_utc")
+            for item in available_province_items
+            if item.get("latest_timestamp_utc")
+        ]
+
+        return {
+            "available": bool(main_series_avg),
+            "window_hours": hours,
+            "score_method": "blended_latest_avg_worst_from_main_peak_ratio_pct_v1",
+            "source_run_id": run.id,
+            "source_started_at_utc": serialize_snapshot_time(run.started_at_utc),
+            "source_finished_at_utc": serialize_snapshot_time(run.finished_at_utc),
+            "latest_timestamp_utc": (
+                main_series_avg[-1].get("timestamp_utc")
+                if main_series_avg
+                else (max(latest_candidates) if latest_candidates else None)
+            ),
+            "latest_main_value": latest_main_value,
+            "latest_previous_value": latest_previous_value,
+            "delta_pct": delta_pct,
+            "peak_main_value": peak_main_value,
+            "min_main_value": min_main_value,
+            "avg_main_value": avg_main_value,
+            "max_drop_from_peak_pct": max_drop_from_peak_pct,
+            "score_latest_pct": score_latest_pct,
+            "score_avg_pct": score_avg_pct,
+            "score_worst_pct": score_worst_pct,
+            "score_window_pct": score_window_pct,
+            "series_main": main_series_avg,
+            "series_previous_aligned": prev_series_avg,
+            "by_province": by_province,
+            "province_count": len(by_province),
+            "provinces_with_data": len(available_province_items),
+        }
+
+    summary = _compute_window_summary_from_payload(payload, hours)
+    summary.update(
+        {
+            "source_run_id": run.id,
+            "source_started_at_utc": serialize_snapshot_time(run.started_at_utc),
+            "source_finished_at_utc": serialize_snapshot_time(run.finished_at_utc),
+        }
+    )
+    return summary
 
 
 def _build_http_requests_24h_summary():
@@ -493,11 +723,19 @@ def connectivity_latest():
             "confidence": snapshot.confidence or "country_level",
         }
 
-    window_score = (
-        to_float(http_requests_window.get("score_worst_pct"))
-        if isinstance(http_requests_window, dict) and http_requests_window.get("available")
-        else None
-    )
+    window_score = None
+    if isinstance(http_requests_window, dict) and http_requests_window.get("available"):
+        window_score = to_float(http_requests_window.get("score_window_pct"))
+        if window_score is None:
+            window_score = to_float(http_requests_window.get("score_worst_pct"))
+    window_by_province = {}
+    if isinstance(http_requests_window, dict):
+        raw_by_province = http_requests_window.get("by_province") or {}
+        if isinstance(raw_by_province, dict):
+            for raw_name, summary in raw_by_province.items():
+                canonical_name = _canonical_province_name(raw_name)
+                if canonical_name:
+                    window_by_province[canonical_name] = summary
     window_series_main = (
         (http_requests_window.get("series_main") or [])
         if isinstance(http_requests_window, dict)
@@ -518,16 +756,39 @@ def connectivity_latest():
     )
     window_end_utc = window_latest_utc or serialize_snapshot_time(now)
 
-    if window_score is not None:
-        national_score = window_score
-        national_status = score_to_status(window_score)
-        national_confidence = "window_worst_http_series_country_level"
-        partial = bool(snapshot.is_partial) if snapshot else False
+    if window_by_province:
+        province_scores = []
+        province_available_count = 0
+        for province, summary in window_by_province.items():
+            province_names.add(province)
+            province_score = to_float(summary.get("score_window_pct"))
+            if province_score is None:
+                province_score = to_float(summary.get("score_worst_pct"))
+            if province_score is None:
+                continue
+            province_available_count += 1
+            province_scores.append(province_score)
+            status_key = score_to_status(province_score)
+            status_by_province[province] = {
+                "province": province,
+                "score": province_score,
+                "status": status_key,
+                "status_label": STATUS_LABELS.get(status_key, STATUS_LABELS[STATUS_UNKNOWN]),
+                "status_color": STATUS_COLORS.get(status_key, STATUS_COLORS[STATUS_UNKNOWN]),
+                "confidence": "province_level_radar_estimated",
+                "is_estimated": False,
+            }
+
+        national_score = window_score if window_score is not None else _average_numeric(province_scores)
+        national_status = score_to_status(national_score)
+        national_confidence = "province_level_radar_aggregate"
+        partial = province_available_count < len(window_by_province)
+
         window_payload.update(
             {
-                "aggregation": "worst_http_series",
+                "aggregation": "blended_http_series",
                 "score_method": http_requests_window.get("score_method")
-                or "worst_from_main_peak_ratio_pct",
+                or "blended_latest_avg_worst_from_main_peak_ratio_pct_v1",
                 "snapshot_count": len(window_snapshots),
                 "national_score": national_score,
                 "national_status": national_status,
@@ -541,6 +802,9 @@ def connectivity_latest():
                 "max_drop_from_peak_pct": http_requests_window.get(
                     "max_drop_from_peak_pct"
                 ),
+                "province_count": len(window_by_province),
+                "provinces_with_data": province_available_count,
+                "province_data_source": "radar_geoid",
             }
         )
     elif window_snapshots:
@@ -589,6 +853,32 @@ def connectivity_latest():
                 ),
                 "start_utc": serialize_snapshot_time(window_start),
                 "end_utc": serialize_snapshot_time(now),
+            }
+        )
+    elif window_score is not None:
+        national_score = window_score
+        national_status = score_to_status(window_score)
+        national_confidence = "window_blended_http_series_country_level"
+        partial = bool(snapshot.is_partial) if snapshot else False
+
+        window_payload.update(
+            {
+                "aggregation": "blended_http_series",
+                "score_method": http_requests_window.get("score_method")
+                or "blended_latest_avg_worst_from_main_peak_ratio_pct_v1",
+                "snapshot_count": len(window_snapshots),
+                "national_score": national_score,
+                "national_status": national_status,
+                "national_status_label": STATUS_LABELS.get(
+                    national_status, STATUS_LABELS[STATUS_UNKNOWN]
+                ),
+                "start_utc": window_start_utc,
+                "end_utc": window_end_utc,
+                "latest_observed_at_utc": window_latest_utc,
+                "http_series_points": len(window_series_main),
+                "max_drop_from_peak_pct": http_requests_window.get(
+                    "max_drop_from_peak_pct"
+                ),
             }
         )
     elif snapshot:
@@ -658,6 +948,7 @@ def connectivity_latest():
             "geojson": enriched_geojson,
             "window": window_payload,
             "http_requests_window": http_requests_window,
+            "http_requests_window_by_province": window_by_province,
             "http_requests_24h": http_requests_24h,
             "source": {
                 "name": "Cloudflare Radar",

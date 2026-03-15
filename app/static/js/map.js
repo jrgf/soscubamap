@@ -31,7 +31,6 @@ let connectivityProvinceRange;
 let connectivityProvinceChartMain;
 let connectivityProvinceChartPrev;
 let connectivityProvinceLog;
-let connectivityProvinceClearBtn;
 let activePopup;
 let recentTimer;
 let searchMarker;
@@ -870,6 +869,19 @@ function getConnectivitySeries(payload) {
   return payload?.http_requests_24h || {};
 }
 
+function getConnectivitySeriesForProvince(payload, provinceName) {
+  const byProvince = payload?.http_requests_window_by_province || {};
+  const selected = normalizeProvinceName(provinceName);
+  if (selected && byProvince && typeof byProvince === "object") {
+    const entries = Object.entries(byProvince);
+    for (let idx = 0; idx < entries.length; idx += 1) {
+      const [name, summary] = entries[idx];
+      if (normalizeProvinceName(name) === selected) return summary || {};
+    }
+  }
+  return getConnectivitySeries(payload);
+}
+
 function stopConnectivityPolling() {
   if (!connectivityRefreshTimer) return;
   clearInterval(connectivityRefreshTimer);
@@ -996,7 +1008,7 @@ function updateConnectivityTrafficPanel(payload) {
     connectivityTrafficValue.textContent = "N/D";
     connectivityTrafficDelta.textContent = "Variacion vs control: N/D";
     connectivityTrafficDrop.textContent = "Caida maxima: N/D";
-    connectivityTrafficNote.textContent = traffic.reason || "Sin serie 24h disponible.";
+    connectivityTrafficNote.textContent = traffic.reason || "Sin serie disponible para la ventana activa.";
     if (connectivitySparkMain) connectivitySparkMain.setAttribute("d", "");
     if (connectivitySparkPrev) connectivitySparkPrev.setAttribute("d", "");
     return;
@@ -1024,7 +1036,10 @@ function updateConnectivityTrafficPanel(payload) {
     : `Puntos: ${pointCount}`;
 
   const prevMap = new Map(
-    seriesPrev.map((item) => [item?.timestamp_utc || "", Number(item?.value)])
+    seriesPrev.map((item) => {
+      const value = Number(item?.value);
+      return [item?.timestamp_utc || "", Number.isFinite(value) ? value : NaN];
+    })
   );
   const mainValues = seriesMain.map((item) => Number(item?.value));
   const prevValues = seriesMain.map((item) => {
@@ -1055,7 +1070,10 @@ function updateConnectivityTrafficPanel(payload) {
 
 function computeNotableDrops(seriesMain, seriesPrev, topN = 8) {
   const prevMap = new Map(
-    (seriesPrev || []).map((item) => [item?.timestamp_utc || "", Number(item?.value)])
+    (seriesPrev || []).map((item) => {
+      const value = Number(item?.value);
+      return [item?.timestamp_utc || "", Number.isFinite(value) ? value : NaN];
+    })
   );
   const events = [];
   for (let idx = 1; idx < (seriesMain || []).length; idx += 1) {
@@ -1126,15 +1144,19 @@ function renderConnectivityProvincePanel(payload) {
     return;
   }
 
-  const traffic = getConnectivitySeries(payload);
-  const seriesMain = Array.isArray(traffic.series_main) ? traffic.series_main : [];
-  const seriesPrev = Array.isArray(traffic.series_previous_aligned) ? traffic.series_previous_aligned : [];
+  const traffic = getConnectivitySeriesForProvince(payload, selectedConnectivityProvince);
+  const baseSeriesMain = Array.isArray(traffic.series_main) ? traffic.series_main : [];
+  const baseSeriesPrev = Array.isArray(traffic.series_previous_aligned)
+    ? traffic.series_previous_aligned
+    : [];
   const provinceState = selectedConnectivityProvinceState || {};
+  const seriesMain = baseSeriesMain;
+  const seriesPrev = baseSeriesPrev;
   const score = Number(provinceState.score);
   const scoreText = Number.isFinite(score) ? `${score.toFixed(1)}%` : "N/D";
   const statusLabel = provinceState.status_label || "Sin datos";
   connectivityProvinceTitle.textContent = `Provincia: ${selectedConnectivityProvince}`;
-  connectivityProvinceStatus.textContent = `Estado: ${statusLabel} (${scoreText}) · Serie Radar nacional compartida por falta de granularidad provincial.`;
+  connectivityProvinceStatus.textContent = `Estado: ${statusLabel} (${scoreText}) · Datos Radar por geoId provincial (estimados).`;
 
   const windowInfo = payload?.window || {};
   const rangeStart = windowInfo.start_utc ? formatUtcAndCuba(windowInfo.start_utc) : "N/D";
@@ -1151,7 +1173,12 @@ function renderConnectivityProvincePanel(payload) {
     return;
   }
 
-  const prevMap = new Map(seriesPrev.map((item) => [item?.timestamp_utc || "", Number(item?.value)]));
+  const prevMap = new Map(
+    seriesPrev.map((item) => {
+      const value = Number(item?.value);
+      return [item?.timestamp_utc || "", Number.isFinite(value) ? value : NaN];
+    })
+  );
   const mainValues = seriesMain.map((item) => Number(item?.value));
   const prevValues = seriesMain.map((item) => {
     const key = item?.timestamp_utc || "";
@@ -1210,6 +1237,8 @@ async function refreshConnectivityLayer() {
       payload?.window?.hours || "",
       payload?.window?.snapshot_count || "",
       payload?.window?.national_score ?? "",
+      payload?.window?.latest_observed_at_utc || "",
+      payload?.window?.max_drop_from_peak_pct ?? "",
       payload?.has_geojson ? "1" : "0",
     ].join("|");
     if (renderKey !== connectivityLastRenderKey || !connectivityGeoLayer) {
@@ -1681,7 +1710,6 @@ async function initMap() {
   connectivityProvinceChartMain = document.getElementById("connectivityProvinceChartMain");
   connectivityProvinceChartPrev = document.getElementById("connectivityProvinceChartPrev");
   connectivityProvinceLog = document.getElementById("connectivityProvinceLog");
-  connectivityProvinceClearBtn = document.getElementById("connectivityProvinceClearBtn");
   connectivityWindowButtons = Array.from(
     document.querySelectorAll("[data-connectivity-window-hours]")
   );
@@ -1701,17 +1729,6 @@ async function initMap() {
       }
     });
   });
-
-  if (connectivityProvinceClearBtn) {
-    connectivityProvinceClearBtn.addEventListener("click", () => {
-      selectedConnectivityProvince = "";
-      selectedConnectivityProvinceState = null;
-      if (connectivityGeoLayer?.setStyle) {
-        connectivityGeoLayer.setStyle(styleForConnectivityFeature);
-      }
-      renderConnectivityProvincePanel(connectivityLastPayload);
-    });
-  }
 
   map = L.map(mapEl, {
     zoomControl: true,

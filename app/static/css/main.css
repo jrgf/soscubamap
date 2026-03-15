@@ -571,7 +571,7 @@ h3 {
 
 .connectivity-province-head {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 10px;
 }
@@ -580,16 +580,6 @@ h3 {
   color: #d6fbe7;
   font-size: 12px;
   font-weight: 700;
-}
-
-.connectivity-province-clear {
-  border: 1px solid rgba(214, 251, 231, 0.25);
-  background: rgba(255, 255, 255, 0.03);
-  color: #d6fbe7;
-  border-radius: 6px;
-  padding: 3px 8px;
-  font-size: 10px;
-  cursor: pointer;
 }
 
 .connectivity-province-status,
