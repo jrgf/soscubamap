@@ -107,6 +107,15 @@ Para más detalles sobre el entorno de desarrollo, convenciones de código y est
 - [Runbook de despliegue y operaciones](docs/RUNBOOK.md)
 - [Guía de contribución](docs/CONTRIBUTING.md)
 
+## Proveedor de mapas por vista
+
+Desde `Admin` puedes elegir proveedor por separado:
+
+- Vista principal (`/`): `OSM + Leaflet` o `Google Maps`
+- Formularios de creación/edición (`/nuevo`, edición de reporte): `OSM + Leaflet` o `Google Maps`
+
+Si `GOOGLE_MAPS_API_KEY` no está configurada, el sistema usa `Leaflet` como fallback.
+
 ## Nota
 
 Los reportes se muestran como anónimos por defecto y pueden pasar por moderación según la configuración.
